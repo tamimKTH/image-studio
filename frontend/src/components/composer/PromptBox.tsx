@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Undo2 } from "lucide-react";
 import { api, type Aspect } from "../../lib/api";
 import { useLive } from "../../lib/events";
+import { isMod } from "../../lib/keys";
 import { Button, cx, toast } from "../ui";
 import s from "./composer.module.css";
 
@@ -37,7 +38,7 @@ export function PromptBox({ value, onChange, placeholder, onSubmit, readOnly, au
       aria-label="Prompt"
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        if (e.key === "Enter" && isMod(e)) {
           e.preventDefault();
           onSubmit?.();
         }
@@ -54,16 +55,25 @@ interface ImproveProps {
   onAspect?: (aspect: Aspect) => void;
   onBusyChange?: (busy: boolean) => void;
   size?: "sm" | "md";
+  /** Changing this hides "Undo improve" (e.g. after the prompt was used to generate). */
+  resetKey?: unknown;
 }
 
-/** ✨ Improve: rewrites the prompt with the model's own prompt enhancer. Click again to stop. */
-export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange, size = "sm" }: ImproveProps) {
+/**
+ * ✨ Improve: rewrites the prompt with the model's own prompt enhancer. Click again to stop.
+ * Afterwards "Undo improve" stays until the prompt is edited, improved again or `resetKey` changes.
+ */
+export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange, size = "sm", resetKey }: ImproveProps) {
   const [busy, setBusy] = useState(false);
-  // The improver shares the engine: if an image is being made, it starts right after that one.
-  const [waiting, setWaiting] = useState(false);
+  const [undo, setUndo] = useState<{ original: string; improved: string } | null>(null);
+  // The improver shares the engine: with other work in the queue it starts right after the current image.
+  const queue = useLive((st) => st.engine?.queue ?? 0);
+  const waiting = busy && queue > 1;
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => onBusyChange?.(busy), [busy, onBusyChange]);
+  useEffect(() => setUndo(null), [resetKey]);
+  const canUndo = !busy && undo !== null && prompt === undo.improved;
 
   async function run() {
     if (busy) {
@@ -72,11 +82,12 @@ export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange
     }
     const previous = prompt;
     abort.current = new AbortController();
-    setWaiting((useLive.getState().engine?.queue ?? 0) > 0);
+    setUndo(null);
     setBusy(true);
     try {
       const r = await api.enhance(prompt, images, abort.current.signal);
       onChange(r.prompt);
+      setUndo({ original: previous, improved: r.prompt });
       if (r.matchImage) onAspect?.("auto");
       else if (r.aspect) onAspect?.(r.aspect);
       toast(r.aspect && !r.matchImage ? `Prompt improved · aspect set to ${r.aspect}` : "Prompt improved", {
@@ -90,23 +101,38 @@ export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange
   }
 
   return (
-    <Button
-      size={size}
-      variant="ghost"
-      className={cx(s.improve, busy && s.improving)}
-      icon={<Sparkles size={15} />}
-      loading={false}
-      disabled={!prompt.trim() && !busy}
-      onClick={run}
-      title={
-        busy
-          ? waiting
-            ? "Starts right after the image being made now — click to stop"
-            : "Stop improving"
-          : "Rewrite the prompt in rich detail with the model's prompt improver"
-      }
-    >
-      {busy ? (waiting ? "After current image… (stop)" : "Improving… (stop)") : "Improve"}
-    </Button>
+    <span className={s.improveGroup}>
+      <Button
+        size={size}
+        variant="ghost"
+        className={cx(s.improve, busy && s.improving)}
+        icon={<Sparkles size={15} />}
+        disabled={!prompt.trim() && !busy}
+        onClick={run}
+        title={
+          busy
+            ? waiting
+              ? "Starts right after the image being made now — click to stop"
+              : "Stop improving"
+            : "Rewrite the prompt in rich detail with the model's prompt improver"
+        }
+      >
+        {busy ? (waiting ? "After current image… (stop)" : "Improving… (stop)") : "Improve"}
+      </Button>
+      {canUndo && (
+        <Button
+          size={size}
+          variant="ghost"
+          icon={<Undo2 size={15} />}
+          title="Put back the prompt you wrote"
+          onClick={() => {
+            onChange(undo.original);
+            setUndo(null);
+          }}
+        >
+          Undo improve
+        </Button>
+      )}
+    </span>
   );
 }

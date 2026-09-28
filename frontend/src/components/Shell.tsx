@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { Activity, Images, Monitor, Moon, Sparkles, Sun, Workflow } from "lucide-react";
+import { Activity, Check, Images, Monitor, Moon, Sparkles, Sun, Workflow } from "lucide-react";
 import { api, type Status } from "../lib/api";
 import { useActiveCount, useLive } from "../lib/events";
 import { applyTheme, loadTheme, type Theme } from "../lib/prefs";
@@ -14,14 +14,14 @@ const NAV = [
   { to: "/library", label: "Library", icon: Images, end: false },
 ];
 
-const THEME_NEXT: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
-const THEME_ICON = { system: Monitor, light: Sun, dark: Moon };
+const THEMES: { value: Theme; label: string; icon: typeof Monitor }[] = [
+  { value: "system", label: "System", icon: Monitor },
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+];
 
 export function Shell({ children }: { children: ReactNode }) {
   const active = useActiveCount();
-  const [theme, setTheme] = useState<Theme>(loadTheme);
-  useEffect(() => applyTheme(theme), [theme]);
-  const ThemeIcon = THEME_ICON[theme];
 
   return (
     <div className={s.shell}>
@@ -38,12 +38,63 @@ export function Shell({ children }: { children: ReactNode }) {
         ))}
         <div className={s.spacer} />
         <EngineIndicator />
-        <IconButton label={`Theme: ${theme}`} onClick={() => setTheme(THEME_NEXT[theme])}>
-          <ThemeIcon size={18} />
-        </IconButton>
+        <ThemeSwitch />
       </nav>
       <main className={s.main}>{children}</main>
     </div>
+  );
+}
+
+/** The operating system's own light/dark setting, kept live. */
+function useSystemDark(): boolean {
+  const [dark, setDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setDark(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return dark;
+}
+
+/** System follows macOS or Windows live; Light and Dark force a theme. */
+function ThemeSwitch() {
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+  const systemDark = useSystemDark();
+  const pop = usePopover();
+  useEffect(() => applyTheme(theme), [theme]);
+  const current = THEMES.find((t) => t.value === theme) ?? THEMES[0];
+
+  return (
+    <>
+      <IconButton ref={pop.anchor} label={`Theme: ${current.label}`} active={pop.open} onClick={pop.toggle}>
+        <current.icon size={18} />
+      </IconButton>
+      <Popover anchor={pop.anchor} open={pop.open} onClose={pop.close} placement="top-start" title="Theme" width={220}>
+        <div role="menu" aria-label="Theme">
+          {THEMES.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={theme === t.value}
+              className={cx(s.themeItem, theme === t.value && s.themeOn)}
+              onClick={() => {
+                setTheme(t.value);
+                pop.close();
+              }}
+            >
+              <t.icon size={16} />
+              <span className={s.themeLabel}>
+                {t.label}
+                {t.value === "system" && <span className={s.themeHint}>{systemDark ? "Dark" : "Light"} on this computer</span>}
+              </span>
+              {theme === t.value && <Check size={16} className={s.themeCheck} />}
+            </button>
+          ))}
+        </div>
+      </Popover>
+    </>
   );
 }
 

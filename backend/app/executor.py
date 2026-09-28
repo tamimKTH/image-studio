@@ -17,11 +17,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
+
 from . import config, db, files
 from .engine import EngineError, EngineOffline, engine, model_status
 from .events import broker
 from .graphs import (ENHANCER_OUTPUT_NODE, QUALITY_STEPS, REMOVE_BACKGROUND_PROMPT, Sampling, enhancer_graph,
-                     image_graph, normalize_references, parse_enhancer, reference_resolution, wrap_transparent)
+                     image_graph, nearest_aspect, normalize_references, parse_enhancer, reference_resolution,
+                     wrap_transparent)
 
 log = logging.getLogger("studio.executor")
 
@@ -75,9 +78,18 @@ def ordered_inputs(node: dict, edges: list[dict]) -> list[str]:
 
 
 def parse_graph(graph: dict) -> tuple[dict[str, dict], list[dict]]:
-    nodes = {n["id"]: n for n in graph.get("nodes", []) if isinstance(n, dict) and n.get("id")}
+    """The nodes that run and the connections between them. Sticky notes never run and connect to nothing."""
+    nodes = {n["id"]: n for n in graph.get("nodes", []) if isinstance(n, dict) and n.get("id") and n.get("type") != "note"}
     edges = [e for e in graph.get("edges", []) if isinstance(e, dict) and e.get("source") in nodes and e.get("target") in nodes]
     return nodes, edges
+
+
+def save_folder(raw: str) -> Path:
+    """A node's or run's save folder, checked like every other folder the app writes to."""
+    try:
+        return files.safe_dest(raw)
+    except HTTPException as e:
+        raise GraphError("That save folder isn't allowed") from e
 
 
 def validate(graph: dict) -> tuple[dict[str, dict], list[dict]]:
@@ -87,6 +99,8 @@ def validate(graph: dict) -> tuple[dict[str, dict], list[dict]]:
     for node in nodes.values():
         kind, data = node.get("type"), node.get("data") or {}
         inputs = ordered_inputs(node, edges)
+        if data.get("folder"):
+            save_folder(str(data["folder"]))
         if kind == "image":
             asset = db.get_asset(data.get("asset") or "")
             if not asset:
@@ -129,14 +143,20 @@ def slug(text: str, limit: int = 40) -> str:
 
 
 # ---------- JSON shapes (see frontend/src/lib/api.ts) ----------
+def asset_name(a: dict) -> str:
+    """The name the user knows: the uploaded file's original name, else the file's own name."""
+    return (a.get("meta") or {}).get("name") or Path(a["path"]).name
+
+
 def asset_json(a: dict) -> dict:
-    name = (a.get("meta") or {}).get("name") or Path(a["path"]).name
-    return {"id": a["id"], "name": name, "path": a["path"], "url": files.file_url(a["path"]), "thumb": files.thumb_url(a["path"]),
-            "width": a["width"] or 0, "height": a["height"] or 0, "hasAlpha": bool(a["has_alpha"])}
+    return {"id": a["id"], "name": asset_name(a), "path": a["path"], "url": files.file_url(a["path"]),
+            "thumb": files.thumb_url(a["path"]), "width": a["width"] or 0, "height": a["height"] or 0,
+            "hasAlpha": bool(a["has_alpha"])}
 
 
 def output_json(a: dict) -> dict:
-    return {"id": a["id"], "url": files.file_url(a["path"]), "thumb": files.thumb_url(a["path"]), "path": a["path"], "name": Path(a["path"]).name}
+    return {"id": a["id"], "url": files.file_url(a["path"]), "thumb": files.thumb_url(a["path"]), "path": a["path"],
+            "name": asset_name(a)}
 
 
 def _outputs(ids: list[str], assets: dict[str, dict]) -> list[dict]:
@@ -181,8 +201,13 @@ class Executor:
         total = run["total"] or 1
         progress = sum((1.0 if r["status"] == "done" else r["progress"]) * node_units(nodes[r["node_id"]]) for r in work) / total
         current = next(({"nodeId": r["node_id"], "step": r["step"], "steps": r["steps"]} for r in work if r["status"] == "running"), None)
+        number = None
+        if run["workflow_id"]:  # 1 for the workflow's first run (of those still in the history), 2 for the next…
+            number = db.one("SELECT COUNT(*) AS n FROM runs WHERE workflow_id = ? AND created_at <= ?",
+                            (run["workflow_id"], run["created_at"]))["n"]  # type: ignore[index]
         return {
-            "id": run["id"], "kind": run["kind"], "workflowId": run["workflow_id"], "name": run["name"], "status": run["status"],
+            "id": run["id"], "kind": run["kind"], "workflowId": run["workflow_id"], "name": run["name"], "number": number,
+            "status": run["status"],
             "total": run["total"], "done": run["done"], "progress": round(min(1.0, progress), 4),
             "createdAt": run["created_at"], "startedAt": run["started_at"], "finishedAt": run["finished_at"], "error": run["error"],
             "thumbs": [o["thumb"] for o in reversed(outputs[-4:])], "outputs": outputs, "current": current,
@@ -308,7 +333,7 @@ class Executor:
         except Canceled:
             self._set_node(run_id, node_id, status="canceled", finished_at=time.time())
         except Exception as e:  # noqa: BLE001 — any failure ends this node with a readable message
-            if not isinstance(e, (EngineError, GraphError, FileNotFoundError)):
+            if not isinstance(e, (EngineError, GraphError, OSError)):  # OSError: disk or permission, the message says it
                 log.exception("node %s of run %s failed", node_id, run_id)
             self._set_node(run_id, node_id, status="failed", error=str(e) or type(e).__name__, finished_at=time.time())
         finally:
@@ -333,15 +358,17 @@ class Executor:
         node = nodes[node_id]
         data = node.get("data") or {}
         inputs = self._input_assets(run_id, node, edges)
-        folder = Path(data.get("folder") or run["folder"])
+        folder = save_folder(data.get("folder") or run["folder"])
         prepared = [await asyncio.to_thread(files.prepare_input, Path(a["path"])) for a in inputs]
         engine_inputs = [p[0] for p in prepared]
+        jobs: list[Job] = []
         try:
             if node["type"] == "removeBackground":
                 user_prompt, negative, aspect, size, transparent, count = "Remove background", "", "auto", "1k", True, 1
                 engine_prompt = REMOVE_BACKGROUND_PROMPT
                 resolution = reference_resolution("1k", "original", engine_inputs)
-                sampling = Sampling(random.randint(0, 2**31 - 1), QUALITY_STEPS["standard"], 1.0, "euler", "simple")
+                steps = QUALITY_STEPS.get(data.get("quality") or "standard", QUALITY_STEPS["standard"])
+                sampling = Sampling(random.randint(0, 2**31 - 1), steps, 1.0, "euler", "simple")
             else:
                 adv = {"seed": None, "negative": "", "cfg": None, "steps": None, "sampler": "euler", "scheduler": "simple",
                        "refDetail": "standard", **(data.get("advanced") or {})}
@@ -368,7 +395,6 @@ class Executor:
 
             self.units[(run_id, node_id)] = [0, count]
             self._set_node(run_id, node_id, steps=sampling.steps, step=0)
-            jobs = []
             for i in range(count):
                 seed = sampling.seed + i
                 graph = image_graph(engine_prompt, negative, engine_inputs, aspect=aspect, size=size, resolution=resolution,
@@ -401,9 +427,24 @@ class Executor:
             if not saved:
                 raise EngineError(errors[0] if errors else "No image was produced")
             self._set_node(run_id, node_id, status="done", progress=1.0, finished_at=time.time())
+        except Exception:
+            await self._drop(jobs)  # this node won't use them: don't leave its other variations running
+            raise
         finally:
             for _, path in prepared:
                 path.unlink(missing_ok=True)
+
+    async def _drop(self, jobs: list[Job]) -> None:
+        """Removes these prompts from the engine queue, or stops the one running."""
+        for job in jobs:
+            if job.future.done():
+                continue
+            try:
+                await engine.cancel(job.prompt_id)
+            except EngineError:
+                pass
+            if not job.started:  # removed from the queue: the engine sends nothing more for it
+                self._finish(job, error="Canceled", canceled=True)
 
     async def _samplers(self) -> tuple[list[str], list[str]]:
         try:
@@ -423,6 +464,9 @@ class Executor:
                 await asyncio.sleep(3)
         self.jobs[job.prompt_id] = job
         self.last_activity, self.unloaded = time.time(), False
+        if job.run_id and job.run_id in self.canceled:  # Cancel came while this was being queued
+            await self._drop([job])
+            raise Canceled()
         return job
 
     async def _save(self, run: dict, node: dict, job: Job, folder: Path, meta: dict, keep_alpha: bool, inputs: list[dict]) -> dict:
@@ -474,12 +518,18 @@ class Executor:
                 history = await engine.history(job.prompt_id) or {}
                 answer = ((history.get("outputs") or {}).get(ENHANCER_OUTPUT_NODE) or {}).get("text")
             try:
-                return parse_enhancer("".join(answer or []))
+                rewritten, aspect, follow = parse_enhancer("".join(answer or []))
             except ValueError as e:
                 raise EngineError(f"The prompt improver gave an unexpected answer ({e})") from e
         finally:
             for _, path in prepared:
                 path.unlink(missing_ok=True)
+        if follow is None:
+            return rewritten, aspect, False
+        if 1 < follow <= len(image_paths):  # the canvas is another image: use that image's shape
+            width, height, _ = await asyncio.to_thread(files.open_image, image_paths[follow - 1])
+            return rewritten, nearest_aspect(f"{width}:{height}"), False
+        return rewritten, None, True
 
     # ---------- cancel ----------
     async def cancel(self, run_id: str) -> None:

@@ -1,4 +1,4 @@
-// Editor state for one workflow: controlled React Flow nodes/edges, input order, undo/redo.
+// Editor state for one workflow: controlled React Flow nodes/edges, input order, clipboard, undo/redo.
 import { useCallback, useReducer, useRef, useState } from "react";
 import {
   applyEdgeChanges,
@@ -9,18 +9,23 @@ import {
   type NodeChange,
   type XYPosition,
 } from "@xyflow/react";
-import type { Graph, NodeType } from "../lib/api";
+import type { Graph, GraphEdge, GraphNode, NodeType } from "../lib/api";
 import { toast } from "../components/ui";
 import {
+  boundsOf,
   connectionProblem,
+  copySelection,
+  freeSpot,
   fromFlow,
   makeNode,
   newId,
+  pasteNodes,
   pruneEdges,
   syncInputs,
   toFlowEdges,
   toFlowNodes,
   type FlowNode,
+  type NodeClipboard,
 } from "./graph";
 
 const HISTORY = 50;
@@ -33,6 +38,8 @@ export interface AddOptions {
   /** Connect the new node's output into an existing node. */
   to?: string;
 }
+
+const deselect = <T extends { selected?: boolean }>(items: T[]) => items.map((i) => (i.selected ? { ...i, selected: false } : i));
 
 export function useGraph(initial: Graph) {
   const [nodes, setNodesState] = useState<FlowNode[]>(() => syncInputs(toFlowNodes(initial.nodes), toFlowEdges(initial.edges)));
@@ -94,6 +101,9 @@ export function useGraph(initial: Graph) {
   const onNodesChange = useCallback(
     (changes: NodeChange<FlowNode>[]) => {
       if (changes.some((c) => c.type === "remove")) commit("delete");
+      // A note being resized: one undo step for the whole drag.
+      const resized = changes.find((c) => c.type === "dimensions" && c.resizing);
+      if (resized && "id" in resized) commit(`resize:${resized.id}`);
       setBoth(applyNodeChanges(changes, nodesRef.current), edgesRef.current);
     },
     [commit, setBoth],
@@ -109,20 +119,46 @@ export function useGraph(initial: Graph) {
 
   const onNodeDragStart = useCallback(() => commit(), [commit]);
 
-  const isValidConnection = useCallback(
-    (c: Connection | Edge) => connectionProblem(c.source, c.target, nodesRef.current, edgesRef.current) === null,
-    [],
-  );
-
+  /** Adds source → target after checking it; shows why when it isn't allowed. Returns whether it was added. */
   const connect = useCallback(
-    (c: Connection) => {
+    (c: Pick<Connection, "source" | "target">): boolean => {
       const problem = connectionProblem(c.source, c.target, nodesRef.current, edgesRef.current);
       if (problem) {
         toast(problem, { tone: "error" });
-        return;
+        return false;
       }
       commit();
       setBoth(nodesRef.current, [...edgesRef.current, { id: newId("e"), source: c.source, target: c.target }]);
+      return true;
+    },
+    [commit, setBoth],
+  );
+
+  /** Moves an existing connection to new ends (the old connection doesn't count as "already connected"). */
+  const reconnect = useCallback(
+    (old: Edge, c: Pick<Connection, "source" | "target">): boolean => {
+      if (old.source === c.source && old.target === c.target) return true;
+      const others = edgesRef.current.filter((e) => e.id !== old.id);
+      const problem = connectionProblem(c.source, c.target, nodesRef.current, others);
+      if (problem) {
+        toast(problem, { tone: "error" });
+        return false;
+      }
+      commit();
+      setBoth(nodesRef.current, [...others, { id: newId("e"), source: c.source, target: c.target }]);
+      return true;
+    },
+    [commit, setBoth],
+  );
+
+  const removeEdge = useCallback(
+    (id: string) => {
+      if (!edgesRef.current.some((e) => e.id === id)) return;
+      commit();
+      setBoth(
+        nodesRef.current,
+        edgesRef.current.filter((e) => e.id !== id),
+      );
     },
     [commit, setBoth],
   );
@@ -132,8 +168,7 @@ export function useGraph(initial: Graph) {
     (type: NodeType, position: XYPosition, opts: AddOptions = {}): string => {
       commit();
       const node = { ...makeNode(type, position, opts.data), selected: true } as FlowNode;
-      const others = nodesRef.current.map((n) => (n.selected ? { ...n, selected: false } : n));
-      const all = [...others, node];
+      const all = [...deselect(nodesRef.current), node];
       const extra: Edge[] = [];
       for (const [source, target] of [
         [opts.from, node.id],
@@ -173,18 +208,43 @@ export function useGraph(initial: Graph) {
     [commit, setBoth],
   );
 
-  /** Copies the selected nodes (and connections into them) next to the originals, and selects the copies. */
+  /** Pastes clipboard nodes with their top-left at `at` (or the nearest free spot); the pasted nodes become the selection. */
+  const paste = useCallback(
+    (clip: { nodes: GraphNode[]; edges: GraphEdge[] }, at: XYPosition): number => {
+      const pasted = pasteNodes(clip, at);
+      if (!pasted.nodes.length) return 0;
+      const spot = freeSpot(at, boundsOf(pasted.nodes), nodesRef.current);
+      const moved = pasted.nodes.map((n) => ({ ...n, position: { x: n.position.x + spot.x - at.x, y: n.position.y + spot.y - at.y } }));
+      commit();
+      setBoth([...deselect(nodesRef.current), ...moved], [...deselect(edgesRef.current), ...pasted.edges]);
+      return pasted.nodes.length;
+    },
+    [commit, setBoth],
+  );
+
+  /** The selection as clipboard data (nodes and the connections between them). */
+  const copy = useCallback((): NodeClipboard | null => copySelection(nodesRef.current, edgesRef.current), []);
+
+  const cut = useCallback((): NodeClipboard | null => {
+    const clip = copySelection(nodesRef.current, edgesRef.current);
+    if (clip) removeNodes(clip.nodes.map((n) => n.id));
+    return clip;
+  }, [removeNodes]);
+
+  /** Copies the selected nodes (and connections into them) to free space next to the originals, and selects the copies. */
   const duplicateSelected = useCallback(() => {
     const selected = nodesRef.current.filter((n) => n.selected);
     if (!selected.length) return;
     commit();
+    const box = boundsOf(selected);
+    const spot = freeSpot(box, box, nodesRef.current);
     const idMap = new Map(selected.map((n) => [n.id, newId()]));
     const copies = selected.map(
       (n) =>
         ({
           ...n,
           id: idMap.get(n.id)!,
-          position: { x: n.position.x + 40, y: n.position.y + 40 },
+          position: { x: n.position.x + spot.x - box.x, y: n.position.y + spot.y - box.y },
           data: structuredClone(n.data),
           selected: true,
         }) as FlowNode,
@@ -195,7 +255,7 @@ export function useGraph(initial: Graph) {
     const remapped = copies.map((n) =>
       n.type === "generate" ? ({ ...n, data: { ...n.data, inputs: n.data.inputs.map((i) => idMap.get(i) ?? i) } } as FlowNode) : n,
     );
-    setBoth([...nodesRef.current.map((n) => (n.selected ? { ...n, selected: false } : n)), ...remapped], [...edgesRef.current, ...copiedEdges]);
+    setBoth([...deselect(nodesRef.current), ...remapped], [...deselect(edgesRef.current), ...copiedEdges]);
   }, [commit, setBoth]);
 
   /** Selects one node (or none) without touching history. */
@@ -203,11 +263,18 @@ export function useGraph(initial: Graph) {
     (id: string | null) => {
       setBoth(
         nodesRef.current.map((n) => (n.selected === (n.id === id) ? n : { ...n, selected: n.id === id })),
-        edgesRef.current.map((e) => (e.selected ? { ...e, selected: false } : e)),
+        deselect(edgesRef.current),
       );
     },
     [setBoth],
   );
+
+  const selectAll = useCallback(() => {
+    setBoth(
+      nodesRef.current.map((n) => (n.selected ? n : { ...n, selected: true })),
+      edgesRef.current,
+    );
+  }, [setBoth]);
 
   return {
     nodes,
@@ -217,13 +284,18 @@ export function useGraph(initial: Graph) {
     onNodesChange,
     onEdgesChange,
     onNodeDragStart,
-    onConnect: connect,
-    isValidConnection,
+    connect,
+    reconnect,
+    removeEdge,
     addNode,
     updateData,
     removeNodes,
+    paste,
+    copy,
+    cut,
     duplicateSelected,
     selectOnly,
+    selectAll,
     undo,
     redo,
     canUndo: past.current.length > 0,

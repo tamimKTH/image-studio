@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import type { Edge } from "@xyflow/react";
 import { Brush, Copy, GripVertical, Image as ImageIcon, ImagePlus, Scissors, Sparkles, Trash2, X } from "lucide-react";
 import type { Asset, GenerateSettings, NodeState } from "../lib/api";
-import { basename } from "../lib/format";
+import { isMac, shortcut } from "../lib/keys";
 import { ImproveButton, PromptBox } from "../components/composer/PromptBox";
 import { OptionsBar } from "../components/composer/OptionsBar";
 import { MarkArea } from "../components/composer/MarkArea";
@@ -54,11 +54,11 @@ export function NodePanel(props: Props) {
         )}
       </div>
       <div className={s.panelFooter}>
-        <Button size="sm" icon={<Copy size={15} />} onClick={onDuplicate} title="Duplicate (⌘D)">
+        <Button size="sm" icon={<Copy size={15} />} onClick={onDuplicate} title={`Duplicate (${shortcut("D")})`}>
           Duplicate
         </Button>
         <span className={s.grow} />
-        <Button size="sm" variant="ghost" icon={<Trash2 size={15} />} onClick={() => onDelete(node.id)} title="Delete (⌫)">
+        <Button size="sm" variant="ghost" icon={<Trash2 size={15} />} onClick={() => onDelete(node.id)} title={`Delete (${isMac ? "⌫" : "Del"})`}>
           Delete
         </Button>
       </div>
@@ -252,7 +252,7 @@ function ImageSettingsPanel({ node, onChange, onMask }: Props & { node: ImageFlo
       </div>
       {asset && (
         <p className={s.muted}>
-          {basename(asset.path)} · {asset.width}×{asset.height}
+          {asset.name} · {asset.width}×{asset.height}
           {asset.hasAlpha ? " · transparent" : ""}
         </p>
       )}
@@ -296,7 +296,7 @@ function ImageSettingsPanel({ node, onChange, onMask }: Props & { node: ImageFlo
 
 // ---------- Save folder ----------
 function FolderSection({ node, workflowFolder, onChange }: Props) {
-  if (node.type === "image") return null;
+  if (node.type === "image" || node.type === "note") return null;
   const own = node.data.folder;
   return (
     <div className={s.section}>

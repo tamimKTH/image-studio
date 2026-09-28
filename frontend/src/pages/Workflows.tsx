@@ -1,10 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, CopyPlus, FileInput, Layers, MoreHorizontal, Pencil, Play, Plus, Scissors, Trash2, Workflow as WorkflowIcon } from "lucide-react";
+import {
+  Copy,
+  CopyPlus,
+  FileDown,
+  FileInput,
+  FileUp,
+  Layers,
+  MoreHorizontal,
+  Pencil,
+  Play,
+  Plus,
+  Scissors,
+  Trash2,
+  Workflow as WorkflowIcon,
+} from "lucide-react";
 import { api, type RunSummary, type WorkflowSummary } from "../lib/api";
 import { useRunList } from "../lib/events";
 import { plural, timeAgo } from "../lib/format";
+import { inTextField, shortcut } from "../lib/keys";
 import { Button, Empty, IconButton, Menu, Modal, Popover, ProgressRing, Spinner, cx, inputClass, textareaClass, toast, usePopover } from "../components/ui";
+import { copyWorkflow, exportWorkflowFile, isWorkflowExport, jsonFileIn, readWorkflowFile } from "../flow/transfer";
 import s from "./workflows.module.css";
 
 type Starter = "blank" | "combine" | "cutout";
@@ -15,14 +31,6 @@ const STARTERS: { key: Starter; title: string; text: string; icon: typeof Plus }
   { key: "blank", title: "Blank", text: "Start from an empty canvas.", icon: Plus },
 ];
 
-const isWorkflowExport = (data: unknown): data is { format: string } =>
-  !!data && typeof data === "object" && (data as { format?: string }).format === "image-studio.workflow";
-
-const isTyping = (t: EventTarget | null) => {
-  const el = t as HTMLElement | null;
-  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
-};
-
 export function Workflows() {
   const navigate = useNavigate();
   const [list, setList] = useState<WorkflowSummary[] | null>(null);
@@ -30,6 +38,7 @@ export function Workflows() {
   const [startersOpen, setStartersOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [renaming, setRenaming] = useState<WorkflowSummary | null>(null);
+  const [fileOver, setFileOver] = useState(false);
   const runs = useRunList();
 
   const refresh = useCallback(async () => {
@@ -65,10 +74,10 @@ export function Workflows() {
     [refresh, navigate],
   );
 
-  // ⌘V a copied workflow anywhere on this page.
+  // Paste (⌘V / Ctrl+V) a copied workflow anywhere on this page.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (isTyping(e.target)) return;
+      if (inTextField(e) || document.querySelector('[aria-modal="true"]')) return;
       const text = e.clipboardData?.getData("text/plain");
       if (!text) return;
       let data: unknown;
@@ -116,13 +125,44 @@ export function Workflows() {
 
   async function copy(wf: WorkflowSummary) {
     try {
-      const data = await api.exportWorkflow(wf.id);
-      await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-      toast("Copied — paste it here with ⌘V to make a copy");
+      await copyWorkflow(wf.id);
+      toast(`Copied — paste it here with ${shortcut("V")} to make a copy`);
     } catch (e) {
       toast((e as Error).message, { tone: "error" });
     }
   }
+
+  async function exportFile(wf: WorkflowSummary) {
+    try {
+      await exportWorkflowFile(wf.id, wf.name);
+    } catch (e) {
+      toast((e as Error).message, { tone: "error" });
+    }
+  }
+
+  // A workflow file dropped anywhere on the page is imported.
+  const pageDrop = {
+    onDragOver: (e: DragEvent) => {
+      if (!e.dataTransfer.types.includes("Files") || document.querySelector('[aria-modal="true"]')) return;
+      e.preventDefault();
+      setFileOver(true);
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) setFileOver(false);
+    },
+    onDrop: async (e: DragEvent) => {
+      const file = jsonFileIn(e.dataTransfer.files);
+      setFileOver(false);
+      if (!e.dataTransfer.files.length) return;
+      e.preventDefault();
+      if (!file) return toast("Drop a workflow file (.studio.json) here", { tone: "error" });
+      try {
+        await importData(await readWorkflowFile(file), false);
+      } catch (err) {
+        toast((err as Error).message, { tone: "error" });
+      }
+    },
+  };
 
   function remove(wf: WorkflowSummary) {
     const unhide = () =>
@@ -159,7 +199,7 @@ export function Workflows() {
   const visible = (list ?? []).filter((w) => !hidden.has(w.id));
 
   return (
-    <div className={s.page}>
+    <div className={cx(s.page, fileOver && s.fileOver)} {...pageDrop}>
       <div className={s.header}>
         <div className={s.titles}>
           <h1 className={s.title}>Workflows</h1>
@@ -204,13 +244,16 @@ export function Workflows() {
                 onRun={() => run(wf)}
                 onDuplicate={() => duplicate(wf)}
                 onCopy={() => copy(wf)}
+                onExport={() => exportFile(wf)}
                 onRename={() => setRenaming(wf)}
                 onDelete={() => remove(wf)}
                 onOpenRun={(id) => navigate(`/runs/${id}`)}
               />
             ))}
           </div>
-          <p className={s.hint}>Tip: copy a workflow from its menu, then press ⌘V on this page to paste a copy.</p>
+          <p className={s.hint}>
+            Tip: copy a workflow from its menu, then press {shortcut("V")} on this page to paste a copy — or drop a .studio.json file here to import it.
+          </p>
         </>
       )}
 
@@ -250,12 +293,13 @@ interface CardProps {
   onRun: () => void;
   onDuplicate: () => void;
   onCopy: () => void;
+  onExport: () => void;
   onRename: () => void;
   onDelete: () => void;
   onOpenRun: (runId: string) => void;
 }
 
-function WorkflowCard({ wf, active, onOpen, onRun, onDuplicate, onCopy, onRename, onDelete, onOpenRun }: CardProps) {
+function WorkflowCard({ wf, active, onOpen, onRun, onDuplicate, onCopy, onExport, onRename, onDelete, onOpenRun }: CardProps) {
   const menu = usePopover();
   const last = wf.lastRun;
   return (
@@ -312,6 +356,7 @@ function WorkflowCard({ wf, active, onOpen, onRun, onDuplicate, onCopy, onRename
               { label: "Run", icon: <Play size={16} />, onSelect: onRun },
               { label: "Duplicate", icon: <CopyPlus size={16} />, onSelect: onDuplicate, separatorBefore: true },
               { label: "Copy", icon: <Copy size={16} />, onSelect: onCopy },
+              { label: "Export file…", icon: <FileDown size={16} />, onSelect: onExport },
               { label: "Rename", icon: <Pencil size={16} />, onSelect: onRename },
               { label: "Delete", icon: <Trash2 size={16} />, onSelect: onDelete, danger: true, separatorBefore: true },
             ]}
@@ -335,10 +380,13 @@ function DiagramGlyph() {
   );
 }
 
+/** Import from a .studio.json file (choose or drop) or from pasted text. */
 function ImportModal({ open, onClose, onImport }: { open: boolean; onClose: () => void; onImport: (data: unknown) => Promise<void> }) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -346,6 +394,27 @@ function ImportModal({ open, onClose, onImport }: { open: boolean; onClose: () =
       setError(null);
     }
   }, [open]);
+
+  async function importData(data: unknown) {
+    setBusy(true);
+    try {
+      await onImport(data);
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importFile(file: File | null) {
+    if (!file) return setError("Choose a workflow file (.studio.json).");
+    try {
+      await importData(await readWorkflowFile(file));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
 
   async function submit() {
     let data: unknown;
@@ -359,15 +428,7 @@ function ImportModal({ open, onClose, onImport }: { open: boolean; onClose: () =
       setError("That text isn't an Image Studio workflow.");
       return;
     }
-    setBusy(true);
-    try {
-      await onImport(data);
-      onClose();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    await importData(data);
   }
 
   return (
@@ -384,6 +445,39 @@ function ImportModal({ open, onClose, onImport }: { open: boolean; onClose: () =
         </>
       }
     >
+      <div
+        className={cx(s.importDrop, over && s.importDropOver)}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(false);
+          void importFile(jsonFileIn(e.dataTransfer.files));
+        }}
+      >
+        <FileUp size={20} />
+        <span>Drop a .studio.json file here</span>
+        <Button size="sm" onClick={() => fileInput.current?.click()} disabled={busy}>
+          Choose file…
+        </Button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            void importFile(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      <div className={s.importOr}>or paste a copied workflow</div>
       <textarea
         className={cx(textareaClass, s.importArea)}
         placeholder="Paste a copied workflow here"

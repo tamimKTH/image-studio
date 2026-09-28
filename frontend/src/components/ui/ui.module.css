@@ -274,8 +274,10 @@
   min-height: 44px;
   padding: 8px 8px 8px 16px;
   border-radius: var(--radius-full);
-  background: var(--text);
-  color: var(--bg);
+  /* Follows the theme: a light pill in light mode, a dark one in dark mode. */
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-lg);
   font-size: var(--text-md);
   pointer-events: auto;
@@ -283,6 +285,7 @@
 }
 .toast.error {
   background: var(--danger);
+  border-color: transparent;
   color: #fff;
 }
 @keyframes rise {
@@ -296,12 +299,16 @@
   padding: 0 14px;
   border: none;
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--bg) 18%, transparent);
-  color: inherit;
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
   font-weight: 600;
 }
 .toastAction:hover {
-  background: color-mix(in srgb, var(--bg) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--accent-soft));
+}
+.toast.error .toastAction {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
 /* ---------- Segmented ---------- */
@@ -330,7 +337,8 @@
 .segment.on {
   background: var(--surface);
   color: var(--text);
-  box-shadow: var(--shadow-sm);
+  /* The ring keeps the chosen segment visible in dark mode, where the surface is darker than the track. */
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--border-strong);
 }
 
 /* ---------- Switch ---------- */

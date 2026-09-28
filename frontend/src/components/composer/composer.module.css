@@ -24,6 +24,11 @@
   color: var(--text-2);
 }
 
+.improveGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
 .improve {
   gap: 6px;
 }

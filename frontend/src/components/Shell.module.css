@@ -122,6 +122,44 @@
   overflow: auto;
 }
 
+.themeItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+.themeItem:hover,
+.themeItem:focus-visible {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.themeItem svg:first-child {
+  color: var(--text-3);
+  flex: none;
+}
+.themeOn svg:first-child {
+  color: var(--accent-soft-text);
+}
+.themeLabel {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+}
+.themeHint {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+.themeCheck {
+  color: var(--accent);
+}
+
 .enginePanel {
   display: grid;
   gap: 10px;

@@ -148,8 +148,11 @@ def nearest_aspect(ratio: str) -> str | None:
     return min(ASPECTS, key=lambda a: abs(math.log(int(a.split(":")[0]) / int(a.split(":")[1])) - target))
 
 
-def parse_enhancer(text: str) -> tuple[str, str | None, bool]:
-    """The enhancer answers with one JSON object: rewritten_prompt, wh_ratio, and (I2I) ratio_follow."""
+def parse_enhancer(text: str) -> tuple[str, str | None, int | None]:
+    """The enhancer answers with one JSON object: rewritten_prompt, wh_ratio, and (I2I) ratio_follow.
+
+    Returns the prompt, the suggested aspect, and which input image (1-based) the output should follow, if any.
+    """
     body = re.sub(r"```(?:json)?", "", text)
     start, end = body.find("{"), body.rfind("}")
     if start < 0 or end <= start:
@@ -158,5 +161,8 @@ def parse_enhancer(text: str) -> tuple[str, str | None, bool]:
     prompt = str(data.get("rewritten_prompt") or "").strip()
     if not prompt:
         raise ValueError("the answer has no rewritten_prompt")
-    match_image = bool(str(data.get("ratio_follow") or "").strip())
-    return prompt, None if match_image else nearest_aspect(str(data.get("wh_ratio") or "")), match_image
+    follow_raw = str(data.get("ratio_follow") or "").strip()
+    if follow_raw:  # e.g. "<image2>"; a follow without a number means image 1
+        number = re.search(r"\d+", follow_raw)
+        return prompt, None, int(number.group()) if number else 1
+    return prompt, nearest_aspect(str(data.get("wh_ratio") or "")), None

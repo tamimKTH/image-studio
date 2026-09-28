@@ -27,7 +27,10 @@ ENGINE_INPUT_DIR = RUNTIME_DIR / "io" / "input"
 ENGINE_OUTPUT_DIR = RUNTIME_DIR / "io" / "output"
 DEFAULT_FOLDER = HOME / "Pictures" / "Image Studio"
 VOLUMES_DIR = Path("/Volumes")
-TRASH_DIR = HOME / ".Trash"
+# Deleted images wait here for 30 days (Undo restores them); Docker can't reach the macOS Trash.
+# A development backend (STUDIO_APP_DIR set) keeps its trash next to its own data.
+TRASH_DIR = APP_DIR / "trash" if os.environ.get("STUDIO_APP_DIR") else RUNTIME_DIR / "trash"
+TRASH_DAYS = 30
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 # Model files, relative to MODELS_DIR (see docs/changes/2026-09-28-image-studio/spec.md).

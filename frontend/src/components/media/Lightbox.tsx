@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Copy, Download, X } from "lucide-react";
 import { api, type FileInfo } from "../../lib/api";
 import { shortPath, timeAgo } from "../../lib/format";
+import { optionLabel } from "../composer/MoreSettings";
 import { Button, IconButton, toast } from "../ui";
 import s from "./media.module.css";
 
@@ -51,7 +52,7 @@ export function Lightbox({ items, index, onIndex, actions }: Props) {
   if (meta?.seed !== undefined) facts.push(["Seed", String(meta.seed)]);
   if (meta?.steps) facts.push(["Steps", String(meta.steps)]);
   if (meta?.cfg) facts.push(["Guidance", String(meta.cfg)]);
-  if (meta?.sampler) facts.push(["Sampler", `${meta.sampler} · ${meta.scheduler ?? ""}`]);
+  if (meta?.sampler) facts.push(["Sampler", [meta.sampler, meta.scheduler].filter(Boolean).map((x) => optionLabel(x!)).join(" · ")]);
   if (meta?.transparent) facts.push(["Background", "Transparent"]);
   if (info) facts.push(["Created", timeAgo(meta?.createdAt ?? info.mtime)]);
 

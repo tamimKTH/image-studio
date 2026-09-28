@@ -1,11 +1,66 @@
+import { useEffect, useState } from "react";
 import { Dices } from "lucide-react";
-import { defaultAdvanced, type Advanced, type GenerateSettings } from "../../lib/api";
+import { api, defaultAdvanced, type Advanced, type GenerateSettings, type Options } from "../../lib/api";
 import { Button, IconButton, Segmented, inputClass, selectClass, textareaClass } from "../ui";
 import s from "./composer.module.css";
 
 export const QUALITY_STEPS = { fast: 16, standard: 28, best: 40 } as const;
-const SAMPLERS = ["euler", "euler_ancestral", "heun", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_3m_sde", "res_multistep", "uni_pc"];
-const SCHEDULERS = ["simple", "normal", "karras", "exponential", "sgm_uniform", "beta", "linear_quadratic"];
+
+/** Steps a generation will use: the custom count if set, otherwise the quality preset's. */
+export function effectiveSteps(v: Pick<GenerateSettings, "quality" | "advanced">): number {
+  return v.advanced?.steps ?? QUALITY_STEPS[v.quality] ?? QUALITY_STEPS.standard;
+}
+
+// Used until the engine's own lists arrive (and if they can't be fetched).
+const FALLBACK: Options = {
+  samplers: ["euler", "euler_ancestral", "heun", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_3m_sde", "res_multistep", "uni_pc"],
+  schedulers: ["simple", "normal", "karras", "exponential", "sgm_uniform", "beta", "linear_quadratic"],
+};
+
+let optionsRequest: Promise<Options> | null = null;
+let engineOptions: Options | null = null;
+
+/** Fetches the engine's sampler and scheduler names once per page load (again later if it failed). */
+export function prefetchOptions(): Promise<Options> {
+  optionsRequest ??= api
+    .options()
+    .then((o) => (engineOptions = o.samplers?.length && o.schedulers?.length ? o : FALLBACK))
+    .catch(() => {
+      optionsRequest = null;
+      return FALLBACK;
+    });
+  return optionsRequest;
+}
+
+function useEngineOptions(): Options {
+  const [options, setOptions] = useState<Options>(engineOptions ?? FALLBACK);
+  useEffect(() => {
+    let alive = true;
+    void prefetchOptions().then((o) => alive && setOptions(o));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return options;
+}
+
+const WORDS: Record<string, string> = {
+  dpmpp: "DPM++", dpm: "DPM", sde: "SDE", gpu: "GPU", cfg: "CFG", pp: "++", cfgpp: "CFG++", lcm: "LCM", lms: "LMS",
+  ddim: "DDIM", ddpm: "DDPM", uni: "Uni", pc: "PC", bh2: "BH2", ipndm: "iPNDM", deis: "DEIS", er: "ER", sa: "SA",
+  kl: "KL", sgm: "SGM", ays: "AYS", gits: "GITS", pece: "PECE", ud10: "UD10", ab: "AB", x0: "x0", heunpp2: "Heun++ 2",
+};
+
+/** "dpmpp_2m_sde" → "DPM++ 2M SDE", "euler_ancestral_cfg_pp" → "Euler ancestral CFG++". */
+export function optionLabel(name: string): string {
+  return name
+    .split("_")
+    .map((w, i) => WORDS[w] ?? (/^\d+[a-z]$/.test(w) ? w.toUpperCase() : i === 0 ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ")
+    .replace(" CFG ++", " CFG++");
+}
+
+/** The engine's list, plus the chosen value if it isn't in it (so a saved choice is never hidden). */
+const withValue = (list: string[], value: string) => (list.includes(value) ? list : [value, ...list]);
 
 /** True when anything under More differs from the defaults (shown as a dot on the button). */
 export function hasAdvancedChanges(v: GenerateSettings): boolean {
@@ -33,12 +88,16 @@ export function MoreSettings({ value, onChange, hasImages }: Props) {
   const a = value.advanced;
   const setA = (patch: Partial<Advanced>) => onChange({ ...value, advanced: { ...a, ...patch } });
   const autoCfg = a.negative.trim() ? 4 : 1;
+  const options = useEngineOptions();
 
   return (
     <div className={s.more}>
       <div className={s.moreRow}>
         <div className={s.moreLabel}>
-          Quality <span className={s.moreHint}>{QUALITY_STEPS[value.quality]} steps</span>
+          Quality{" "}
+          <span className={s.moreHint}>
+            {a.steps !== null ? `${a.steps} steps (custom)` : `${QUALITY_STEPS[value.quality]} steps`}
+          </span>
         </div>
         <Segmented
           label="Quality"
@@ -117,27 +176,37 @@ export function MoreSettings({ value, onChange, hasImages }: Props) {
       </div>
 
       <div className={s.moreRow}>
-        <div className={s.moreLabel}>Steps and sampler</div>
+        <div className={s.moreLabel}>
+          Steps{" "}
+          <span className={s.moreHint}>{a.steps === null ? `Auto: ${QUALITY_STEPS[value.quality]}, from Quality` : "Custom — clear to use Quality"}</span>
+        </div>
+        <input
+          className={inputClass}
+          type="number"
+          min={1}
+          max={100}
+          placeholder={`Auto (${QUALITY_STEPS[value.quality]})`}
+          value={a.steps ?? ""}
+          onChange={(e) => setA({ steps: e.target.value ? Math.min(100, Math.max(1, Math.floor(Number(e.target.value)))) : null })}
+          aria-label="Steps"
+        />
+      </div>
+
+      <div className={s.moreRow}>
+        <div className={s.moreLabel}>Sampler and scheduler</div>
         <div className={s.inline}>
-          <input
-            className={inputClass}
-            type="number"
-            min={1}
-            max={100}
-            placeholder={`Auto (${QUALITY_STEPS[value.quality]})`}
-            value={a.steps ?? ""}
-            onChange={(e) => setA({ steps: e.target.value ? Math.min(100, Math.max(1, Math.floor(Number(e.target.value)))) : null })}
-            aria-label="Steps"
-            style={{ width: 110 }}
-          />
           <select className={selectClass} value={a.sampler} onChange={(e) => setA({ sampler: e.target.value })} aria-label="Sampler">
-            {SAMPLERS.map((x) => (
-              <option key={x}>{x}</option>
+            {withValue(options.samplers, a.sampler).map((x) => (
+              <option key={x} value={x}>
+                {optionLabel(x)}
+              </option>
             ))}
           </select>
           <select className={selectClass} value={a.scheduler} onChange={(e) => setA({ scheduler: e.target.value })} aria-label="Scheduler">
-            {SCHEDULERS.map((x) => (
-              <option key={x}>{x}</option>
+            {withValue(options.schedulers, a.scheduler).map((x) => (
+              <option key={x} value={x}>
+                {optionLabel(x)}
+              </option>
             ))}
           </select>
         </div>

@@ -23,6 +23,7 @@ import { rememberFolder, useFolders } from "../lib/folders";
 import { sendToCreate } from "../lib/handoff";
 import { FolderBrowser } from "../components/folders/FolderBrowser";
 import { Lightbox, type LightboxItem } from "../components/media/Lightbox";
+import { deleteImage } from "../components/media/RunResults";
 import {
   Button,
   Empty,
@@ -62,6 +63,7 @@ export function Library() {
   const [browsing, setBrowsing] = useState(false);
   const [renaming, setRenaming] = useState<Folder | null>(null);
   const [openPath, setOpenPath] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   // Read by the loader below without making it reload.
   const loadedCount = useRef(0);
   loadedCount.current = items.length;
@@ -93,7 +95,7 @@ export function Library() {
     return () => {
       cancelled = true;
     };
-  }, [path, version]);
+  }, [path, version, reload]);
 
   // Keep the image counts in the folder list current.
   useEffect(() => {
@@ -176,20 +178,22 @@ export function Library() {
   const lightboxItems: LightboxItem[] = items.map((i) => ({ url: i.url, path: i.path, name: i.name }));
   const openIndex = openPath ? lightboxItems.findIndex((i) => i.path === openPath) : -1;
 
-  async function trashImage(index: number) {
+  async function deleteAt(index: number) {
     const image = items[index];
     if (!image) return;
-    try {
-      await api.trash(image.path);
-      const next = items[index + 1] ?? items[index - 1];
-      setItems((prev) => prev.filter((x) => x.path !== image.path));
-      setTotal((t) => Math.max(0, t - 1));
-      setOpenPath(next ? next.path : null);
-      toast("Moved to Trash");
-      refresh().catch(() => undefined);
-    } catch (e) {
-      errorToast(e);
-    }
+    const next = items[index + 1] ?? items[index - 1];
+    await deleteImage(image.path, {
+      onDeleted: () => {
+        setItems((prev) => prev.filter((x) => x.path !== image.path));
+        setTotal((t) => Math.max(0, t - 1));
+        setOpenPath(next ? next.path : null);
+        refresh().catch(() => undefined);
+      },
+      onRestored: () => {
+        setReload((n) => n + 1);
+        refresh().catch(() => undefined);
+      },
+    });
   }
 
   const showingItems = itemsPath === path;
@@ -356,8 +360,8 @@ export function Library() {
               <Button icon={<ImagePlus size={16} />} onClick={() => sendImageToCreate(image)}>
                 Use in Create
               </Button>
-              <Button icon={<Trash2 size={16} />} onClick={() => trashImage(index)}>
-                Move to Trash
+              <Button icon={<Trash2 size={16} />} onClick={() => deleteAt(index)}>
+                Delete
               </Button>
             </>
           );

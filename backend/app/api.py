@@ -1,6 +1,8 @@
 """HTTP API. Shapes match frontend/src/lib/api.ts."""
 import asyncio
+import hashlib
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -10,13 +12,18 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import config, db, files, starters
-from .engine import engine, model_status
+from .engine import EngineError, engine, model_status
 from .events import broker
 from .executor import Canceled, GraphError, asset_json, executor
 
 router = APIRouter(prefix="/api")
 
 Aspect = Literal["auto", "1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16"]
+Quality = Literal["fast", "standard", "best"]
+NODE_TYPES = {"image", "generate", "removeBackground", "note"}
+# The lists the app offers when the engine can't be asked (it is offline).
+FALLBACK_SAMPLERS = ["euler", "euler_ancestral", "heun", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_3m_sde", "res_multistep", "uni_pc"]
+FALLBACK_SCHEDULERS = ["simple", "normal", "karras", "exponential", "sgm_uniform", "beta", "linear_quadratic"]
 
 
 class Advanced(BaseModel):
@@ -32,7 +39,7 @@ class Advanced(BaseModel):
 class GenerateSettings(BaseModel):
     aspect: Aspect = "auto"
     size: Literal["1k", "2k"] = "1k"
-    quality: Literal["fast", "standard", "best"] = "standard"
+    quality: Quality = "standard"
     count: int = Field(1, ge=1, le=4)
     transparent: bool = False
     advanced: Advanced = Field(default_factory=Advanced)
@@ -47,6 +54,7 @@ class CreateBody(GenerateSettings):
 class RemoveBackgroundBody(BaseModel):
     asset: str
     folder: str | None = None
+    quality: Quality = "standard"
 
 
 class EnhanceBody(BaseModel):
@@ -56,6 +64,10 @@ class EnhanceBody(BaseModel):
 
 class PathBody(BaseModel):
     path: str
+
+
+class RestoreBody(BaseModel):
+    id: str
 
 
 class FolderBody(BaseModel):
@@ -96,7 +108,7 @@ def default_folder() -> str:
 
 
 def run_folder(raw: str | None) -> str:
-    return str(files.safe_path(raw, must_exist=False)) if raw else default_folder()
+    return str(files.safe_dest(raw)) if raw else default_folder()
 
 
 def require_asset(asset_id: str) -> dict:
@@ -116,9 +128,30 @@ def folder_json(row: dict) -> dict:
 
 def check_graph(graph: dict[str, Any] | None) -> dict[str, Any]:
     graph = graph or {"nodes": [], "edges": []}
-    if not isinstance(graph.get("nodes"), list) or not isinstance(graph.get("edges"), list):
+    nodes, edges = graph.get("nodes"), graph.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
         raise HTTPException(400, "A workflow needs nodes and edges")
+    for n in nodes:
+        if (not isinstance(n, dict) or not isinstance(n.get("id"), str) or n.get("type") not in NODE_TYPES
+                or not isinstance(n.get("data") or {}, dict)):
+            raise HTTPException(400, "The workflow has a step Image Studio doesn't know")
+    for e in edges:
+        if not isinstance(e, dict) or not isinstance(e.get("source"), str) or not isinstance(e.get("target"), str):
+            raise HTTPException(400, "The workflow has a broken connection")
     return graph
+
+
+def unique_name(name: str, copy: bool) -> str:
+    """'X' if free (unless `copy`), else 'X copy', 'X copy 2', … like Finder."""
+    name = name.strip()[:120] or "Untitled workflow"
+    taken = {r["name"] for r in db.all_rows("SELECT name FROM workflows")}
+    if not copy and name not in taken:
+        return name
+    base = re.sub(r" copy(?: \d+)?$", "", name)
+    candidate, n = f"{base} copy", 2
+    while candidate in taken:
+        candidate, n = f"{base} copy {n}", n + 1
+    return candidate
 
 
 def workflow_json(row: dict) -> dict:
@@ -167,7 +200,7 @@ async def get_settings() -> dict:
 
 @router.put("/settings")
 async def put_settings(body: SettingsBody) -> dict:
-    folder = files.safe_dir(body.defaultFolder)
+    folder = files.safe_dest_dir(body.defaultFolder)
     db.set_setting("defaultFolder", str(folder))
     db.upsert_folder(str(folder), folder.name, touch=True)
     return {"defaultFolder": str(folder)}
@@ -192,7 +225,7 @@ async def folders() -> list[dict]:
 
 @router.post("/folders")
 async def add_folder(body: FolderBody) -> dict:
-    folder = files.safe_dir(body.path)
+    folder = files.safe_dest_dir(body.path)
     row = db.upsert_folder(str(folder), folder.name, pinned=body.pinned, touch=True)
     return await asyncio.to_thread(folder_json, row)
 
@@ -263,18 +296,28 @@ async def file_info(path: str) -> dict:
         raise HTTPException(415, "Can't read this image") from e
 
 
-@router.post("/files/trash", status_code=204)
-async def trash(body: PathBody) -> Response:
+@router.post("/files/trash")
+async def trash(body: PathBody) -> dict:
     p = _image_file(body.path)
-    await asyncio.to_thread(files.move_to_trash, p)
+    trash_id = await asyncio.to_thread(files.move_to_trash, p)
     broker.publish("folder", {"path": str(p.parent)})
-    return Response(status_code=204)
+    return {"id": trash_id}
+
+
+@router.post("/files/restore")
+async def restore(body: RestoreBody) -> dict:
+    p = await asyncio.to_thread(files.restore_from_trash, body.id)
+    broker.publish("folder", {"path": str(p.parent)})
+    return {"path": str(p)}
 
 
 # ---------- assets ----------
 @router.post("/assets/upload")
 async def upload(files_: list[UploadFile] = File(..., alias="files"), meta: str | None = Form(None)) -> list[dict]:
-    extra = json.loads(meta) if meta else {}
+    try:
+        extra = json.loads(meta) if meta else {}
+    except ValueError:
+        extra = None
     if not isinstance(extra, dict):
         raise HTTPException(400, "meta must be a JSON object")
     config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -284,14 +327,21 @@ async def upload(files_: list[UploadFile] = File(..., alias="files"), meta: str 
         suffix = Path(name).suffix.lower() or ".png"
         if suffix not in config.UPLOAD_EXTENSIONS:
             raise HTTPException(400, f"“{name}” isn't a supported image")
+        data = await item.read()
+        digest = hashlib.sha256(data).hexdigest()
+        existing = db.find_upload(digest)
+        if existing and Path(existing["path"]).is_file():  # the same picture again: reuse it
+            out.append(asset_json(existing))
+            continue
         target = config.UPLOADS_DIR / f"{db.new_id()}{suffix}"
-        target.write_bytes(await item.read())
+        target.write_bytes(data)
         try:
+            target = await asyncio.to_thread(files.convert_upload, target)
             width, height, alpha = await asyncio.to_thread(files.open_image, target)
         except Exception as e:
             target.unlink(missing_ok=True)
             raise HTTPException(400, f"Image Studio can't read “{name}”") from e
-        out.append(asset_json(db.insert_asset(str(target), "upload", width, height, alpha, {**extra, "name": name})))
+        out.append(asset_json(db.insert_asset(str(target), "upload", width, height, alpha, {**extra, "name": name, "sha256": digest})))
     return out
 
 
@@ -335,9 +385,20 @@ async def create(body: CreateBody) -> dict:
 async def remove_background(body: RemoveBackgroundBody) -> dict:
     asset = require_asset(body.asset)
     graph = {"nodes": [{"id": "in1", "type": "image", "position": {"x": 0, "y": 0}, "data": {"asset": asset["id"]}},
-                       {"id": "cut", "type": "removeBackground", "position": {"x": 340, "y": 0}, "data": {"folder": None}}],
+                       {"id": "cut", "type": "removeBackground", "position": {"x": 340, "y": 0},
+                        "data": {"folder": None, "quality": body.quality}}],
              "edges": [{"id": "e-in1", "source": "in1", "target": "cut"}]}
     return start_run(graph, kind="create", name=f"Remove background · {asset_json(asset)['name']}", folder=run_folder(body.folder))
+
+
+@router.get("/options")
+async def options() -> dict:
+    """The sampler and scheduler names the engine offers (its KSampler inputs)."""
+    try:
+        samplers, schedulers = await engine.samplers()
+    except EngineError:
+        samplers, schedulers = FALLBACK_SAMPLERS, FALLBACK_SCHEDULERS
+    return {"samplers": samplers, "schedulers": schedulers}
 
 
 @router.post("/enhance")
@@ -412,7 +473,7 @@ async def delete_workflow(workflow_id: str) -> Response:
 @router.post("/workflows/{workflow_id}/duplicate")
 async def duplicate_workflow(workflow_id: str) -> dict:
     row = get_workflow(workflow_id)
-    return insert_workflow(f"{row['name']} copy", json.loads(row["graph"]), row["folder"])
+    return insert_workflow(unique_name(row["name"], copy=True), json.loads(row["graph"]), row["folder"])
 
 
 @router.get("/workflows/{workflow_id}/export")
@@ -432,7 +493,7 @@ async def import_workflow(body: dict[str, Any]) -> dict:
     if body.get("format") != "image-studio.workflow" or not isinstance(body.get("graph"), dict):
         raise HTTPException(400, "That isn't an Image Studio workflow")
     graph = check_graph(body["graph"])
-    paths = body.get("assets") or {}
+    paths = body.get("assets") if isinstance(body.get("assets"), dict) else {}
     for node in graph["nodes"]:
         data = node.get("data") or {}
         if node.get("type") != "image" or not data.get("asset"):
@@ -442,10 +503,11 @@ async def import_workflow(body: dict[str, Any]) -> dict:
             continue
         path = paths.get(data["asset"])
         try:
-            data["asset"] = (await asset_from_path(PathBody(path=path)))["id"] if path else None
+            data["asset"] = (await asset_from_path(PathBody(path=path)))["id"] if isinstance(path, str) and path else None
         except HTTPException:
             data["asset"] = None
-    return insert_workflow(str(body.get("name") or "Imported workflow"), graph, body.get("folder"))
+    folder = body.get("folder") if isinstance(body.get("folder"), str) else None
+    return insert_workflow(unique_name(str(body.get("name") or "Imported workflow"), copy=False), graph, folder)
 
 
 @router.post("/workflows/{workflow_id}/run")

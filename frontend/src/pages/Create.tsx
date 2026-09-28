@@ -12,6 +12,7 @@ import {
 } from "../lib/api";
 import { useLive } from "../lib/events";
 import { takeHandoff, useHandoff } from "../lib/handoff";
+import { isMod, shortcut } from "../lib/keys";
 import { load, save } from "../lib/prefs";
 import { ImageStrip, MAX_IMAGES, useImageDrop } from "../components/composer/ImageStrip";
 import { OptionsBar } from "../components/composer/OptionsBar";
@@ -83,6 +84,7 @@ export function Create() {
   const [folder, setFolder] = useState<string | null>(initial.folder);
   const [improving, setImproving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [generated, setGenerated] = useState(0);
   const [openPath, setOpenPath] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const top = useRef<HTMLDivElement>(null);
@@ -91,19 +93,30 @@ export function Create() {
 
   useEffect(() => save("create", { settings, folder }), [settings, folder]);
 
+  // An edit follows image 1 unless an aspect is picked: attaching the first image switches to "Match image 1".
+  const matchFirstImage = useCallback(() => setSettings((st) => (st.aspect === "auto" ? st : { ...st, aspect: "auto" })), []);
+
   // Images (and a prompt) handed over from Library, Activity or a run.
   const handoffSeq = useHandoff((st) => st.seq);
   useEffect(() => {
     const handed = takeHandoff();
-    if (handed.images.length) setImages(handed.images.slice(0, MAX_IMAGES));
+    if (handed.images.length) {
+      if (!imagesRef.current.length) matchFirstImage();
+      setImages(handed.images.slice(0, MAX_IMAGES));
+    }
     if (handed.prompt) setPrompt(handed.prompt);
-  }, [handoffSeq]);
+  }, [handoffSeq, matchFirstImage]);
 
-  const addImages = useCallback((assets: Asset[]) => {
-    const next = [...imagesRef.current, ...assets];
-    if (next.length > MAX_IMAGES) toast(`Up to ${MAX_IMAGES} images — the rest were left out`);
-    setImages(next.slice(0, MAX_IMAGES));
-  }, []);
+  const addImages = useCallback(
+    (assets: Asset[]) => {
+      if (!assets.length) return;
+      if (!imagesRef.current.length) matchFirstImage();
+      const next = [...imagesRef.current, ...assets];
+      if (next.length > MAX_IMAGES) toast(`Up to ${MAX_IMAGES} images — the rest were left out`);
+      setImages(next.slice(0, MAX_IMAGES));
+    },
+    [matchFirstImage],
+  );
   const drop = useImageDrop(addImages);
 
   const runsMap = useLive((st) => st.runs);
@@ -126,6 +139,7 @@ export function Create() {
     setSubmitting(true);
     try {
       const { runId } = await api.create({ ...settings, prompt: prompt.trim(), images: images.map((i) => i.id), folder });
+      setGenerated((n) => n + 1);
       await primeRun(runId);
     } catch (e) {
       errorToast(e);
@@ -136,10 +150,10 @@ export function Create() {
   const generateRef = useRef(generate);
   generateRef.current = generate;
 
-  // ⌘↵ anywhere on the page (the prompt box handles it itself and marks the event handled).
+  // ⌘↵ or Ctrl+Enter anywhere on the page (the prompt box handles it itself and marks the event handled).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.defaultPrevented) return;
+      if (e.key !== "Enter" || !isMod(e) || e.defaultPrevented) return;
       if (document.querySelector('[aria-modal="true"]')) return;
       e.preventDefault();
       void generateRef.current();
@@ -248,7 +262,7 @@ export function Create() {
       <CardAction label="Download" onClick={() => downloadFile(o.url, o.name)}>
         <Download size={15} />
       </CardAction>
-      <CardAction label="Move to Trash" onClick={() => trash(o.path)}>
+      <CardAction label="Delete" onClick={() => trash(o.path)}>
         <Trash2 size={15} />
       </CardAction>
     </>
@@ -282,6 +296,7 @@ export function Create() {
                 onChange={setPrompt}
                 onAspect={(aspect) => setSettings((st) => ({ ...st, aspect }))}
                 onBusyChange={setImproving}
+                resetKey={generated}
               />
             </div>
             <div className={s.barRight}>
@@ -290,7 +305,7 @@ export function Create() {
                 variant="primary"
                 className={s.generate}
                 icon={<Sparkles size={16} />}
-                shortcut="⌘↵"
+                shortcut={shortcut("Enter")}
                 onClick={generate}
                 loading={submitting}
                 disabled={!canGenerate}
@@ -434,7 +449,7 @@ export function Create() {
                 </Button>
               )}
               <Button icon={<Trash2 size={16} />} onClick={() => trashFromLightbox(index)}>
-                Move to Trash
+                Delete
               </Button>
             </>
           );

@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS run_nodes (
   run_id TEXT NOT NULL, node_id TEXT NOT NULL, status TEXT NOT NULL, progress REAL NOT NULL DEFAULT 0,
   step INTEGER NOT NULL DEFAULT 0, steps INTEGER NOT NULL DEFAULT 0, outputs TEXT NOT NULL DEFAULT '[]',
   error TEXT, started_at REAL, finished_at REAL, PRIMARY KEY (run_id, node_id));
+CREATE TABLE IF NOT EXISTS trash (
+  id TEXT PRIMARY KEY, original_path TEXT NOT NULL, trash_path TEXT NOT NULL, created_at REAL NOT NULL);
 """
 
 _conn: sqlite3.Connection | None = None
@@ -103,6 +105,13 @@ def get_asset(asset_id: str) -> dict[str, Any] | None:
     if row:
         row["meta"] = json.loads(row["meta"] or "{}")
     return row
+
+
+def find_upload(sha256: str) -> dict[str, Any] | None:
+    """The newest upload with exactly these bytes, so the same picture isn't stored twice."""
+    row = one("SELECT id FROM assets WHERE kind = 'upload' AND json_extract(meta, '$.sha256') = ? ORDER BY created_at DESC LIMIT 1",
+              (sha256,))
+    return get_asset(row["id"]) if row else None
 
 
 def assets_by_ids(ids: list[str]) -> dict[str, dict[str, Any]]:

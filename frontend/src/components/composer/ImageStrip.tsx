@@ -44,6 +44,7 @@ export function useImageDrop(onAssets: (assets: Asset[]) => void, enabled = true
       const files = e.clipboardData?.files;
       if (!files?.length) return;
       if (target?.closest("input:not([type=file])")) return;
+      if (document.querySelector('[aria-modal="true"]')) return; // a dialog is on top of this page
       e.preventDefault();
       void accept(files);
     };
@@ -99,7 +100,7 @@ export function ImageStrip({ assets, onChange, uploading, onAddFiles }: Props) {
           key={`${a.id}-${i}`}
           className={cx(s.thumb, "checker", dragIndex === i && s.dragging, overIndex === i && dragIndex !== i && s.dropTarget)}
           draggable
-          title={`image ${i + 1} — write "image ${i + 1}" in the prompt to refer to it${i === 0 ? " (the image being edited)" : ""}`}
+          title={`${a.name} — image ${i + 1}: write "image ${i + 1}" in the prompt to refer to it${i === 0 ? " (the image being edited)" : ""}`}
           onDragStart={(e) => {
             setDragIndex(i);
             e.dataTransfer.effectAllowed = "move";
@@ -120,7 +121,7 @@ export function ImageStrip({ assets, onChange, uploading, onAddFiles }: Props) {
             setOverIndex(null);
           }}
         >
-          <img src={a.thumb} alt={`Input ${i + 1}`} draggable={false} />
+          <img src={a.thumb} alt={`Input ${i + 1}: ${a.name}`} draggable={false} />
           <span className={s.number}>{i + 1}</span>
           <div className={s.thumbActions}>
             <button type="button" className={s.thumbAction} aria-label="Mark an area" title="Mark an area to change" onClick={() => setMarking(a)}>

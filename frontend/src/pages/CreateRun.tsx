@@ -4,7 +4,7 @@ import { ArrowLeft, Copy, Download, ImagePlus, Pencil, RotateCcw, Square, Trash2
 import { api, defaultAdvanced, type OutputImage, type RunDetail } from "../lib/api";
 import { duration, shortPath, timeAgo } from "../lib/format";
 import { sendToCreate } from "../lib/handoff";
-import { QUALITY_STEPS } from "../components/composer/MoreSettings";
+import { QUALITY_STEPS, optionLabel } from "../components/composer/MoreSettings";
 import { CardAction } from "../components/media/ImageCard";
 import { Lightbox, type LightboxItem } from "../components/media/Lightbox";
 import {
@@ -14,6 +14,8 @@ import {
   isActive,
   outputAsset,
   primeRun,
+  runAgain as startAgain,
+  runAgainLabel,
   runInputs,
   runStatusText,
   settingsSummary,
@@ -57,9 +59,10 @@ export function CreateRunView({ run }: { run: RunDetail }) {
     }
   }
 
+  const again = runAgainLabel(run);
   async function runAgain() {
     try {
-      const { runId } = await api.retryRun(run.id);
+      const runId = await startAgain(run);
       await primeRun(runId);
       navigate(`/runs/${runId}`);
     } catch (e) {
@@ -93,7 +96,7 @@ export function CreateRunView({ run }: { run: RunDetail }) {
       <CardAction label="Download" onClick={() => downloadFile(o.url, o.name)}>
         <Download size={15} />
       </CardAction>
-      <CardAction label="Move to Trash" onClick={() => trash(o.path)}>
+      <CardAction label="Delete" onClick={() => trash(o.path)}>
         <Trash2 size={15} />
       </CardAction>
     </>
@@ -105,13 +108,16 @@ export function CreateRunView({ run }: { run: RunDetail }) {
     const quality = g.quality in QUALITY_STEPS ? g.quality : "standard";
     facts.push(["Size", g.size === "2k" ? "2K (native)" : "1K"]);
     facts.push(["Aspect", g.aspect === "auto" ? (inputs.length ? "Matches image 1" : "1:1") : g.aspect]);
-    facts.push(["Quality", `${quality[0].toUpperCase()}${quality.slice(1)} · ${a.steps ?? QUALITY_STEPS[quality]} steps`]);
+    facts.push([
+      "Quality",
+      a.steps !== null ? `${a.steps} steps (custom)` : `${quality[0].toUpperCase()}${quality.slice(1)} · ${QUALITY_STEPS[quality]} steps`,
+    ]);
     if (g.count > 1) facts.push(["Variations", String(g.count)]);
     if (g.transparent) facts.push(["Background", "Transparent"]);
     facts.push(["Seed", a.seed === null ? "Random" : String(a.seed)]);
     if (a.negative.trim()) facts.push(["Avoid", a.negative.trim()]);
     if (a.cfg !== null) facts.push(["Guidance", String(a.cfg)]);
-    if (a.sampler !== "euler" || a.scheduler !== "simple") facts.push(["Sampler", `${a.sampler} · ${a.scheduler}`]);
+    if (a.sampler !== "euler" || a.scheduler !== "simple") facts.push(["Sampler", `${optionLabel(a.sampler)} · ${optionLabel(a.scheduler)}`]);
   }
   facts.push(["Started", timeAgo(run.startedAt ?? run.createdAt)]);
   if (run.finishedAt && run.startedAt) facts.push(["Took", duration(run.finishedAt - run.startedAt)]);
@@ -137,8 +143,8 @@ export function CreateRunView({ run }: { run: RunDetail }) {
               Cancel
             </Button>
           ) : (
-            <Button icon={<RotateCcw size={16} />} onClick={runAgain}>
-              Run again
+            <Button icon={<RotateCcw size={16} />} onClick={runAgain} title={again.title}>
+              {again.label}
             </Button>
           )}
           <Button icon={<Pencil size={16} />} onClick={editInCreate}>
@@ -235,7 +241,7 @@ export function CreateRunView({ run }: { run: RunDetail }) {
                   if (await trash(output.path)) setOpenPath(next && next.path !== output.path ? next.path : null);
                 }}
               >
-                Move to Trash
+                Delete
               </Button>
             </>
           );

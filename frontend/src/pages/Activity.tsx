@@ -4,7 +4,8 @@ import { Activity as ActivityIcon, RotateCcw, Sparkles, Square, Workflow, X } fr
 import { api, type RunSummary } from "../lib/api";
 import { useLive, usePreview } from "../lib/events";
 import { duration, plural, timeAgo } from "../lib/format";
-import { isActive, primeRun } from "../components/media/RunResults";
+import { stepLabel } from "../components/media/ImageCard";
+import { isActive, primeRun, runAgain as startAgain, runAgainLabel } from "../components/media/RunResults";
 import { Button, Empty, IconButton, cx, toast } from "../components/ui";
 import s from "./activity.module.css";
 
@@ -16,7 +17,9 @@ function statusLine(run: RunSummary): { text: string; tone: "running" | "failed"
     case "queued":
       return { text: "In queue", tone: "running" };
     case "running": {
-      const step = run.current?.steps ? `Step ${run.current.step} of ${run.current.steps}` : "Loading the model…";
+      // No image is being made right now: the next one waits in the engine's queue (or for its inputs).
+      if (!run.current) return { text: `${plural(run.done, "image")} done · waiting for the engine…`, tone: "running" };
+      const step = stepLabel(run.current.step, run.current.steps);
       if (run.total > 1) return { text: `Generating image ${Math.min(run.done + 1, run.total)} of ${run.total} · ${step}`, tone: "running" };
       return { text: `Generating · ${step}`, tone: "running" };
     }
@@ -106,6 +109,8 @@ function RunRow({ run }: { run: RunSummary }) {
   const thumbs = run.outputs.slice(-3).map((o) => o.thumb);
   if (preview && thumbs.length < 3) thumbs.push(preview);
   const KindIcon = run.kind === "workflow" ? Workflow : Sparkles;
+  // Runs of the same workflow are told apart by their number.
+  const name = run.kind === "workflow" && run.number ? `${run.name} · Run ${run.number}` : run.name;
   const open = () => navigate(`/runs/${run.id}`);
 
   async function cancel() {
@@ -117,11 +122,14 @@ function RunRow({ run }: { run: RunSummary }) {
     }
   }
 
+  const again = runAgainLabel(run);
   async function runAgain() {
     try {
-      const { runId } = await api.retryRun(run.id);
+      const runId = await startAgain(run);
       await primeRun(runId);
-      toast("Running again", { action: { label: "Open", onClick: () => navigate(`/runs/${runId}`) } });
+      toast(run.status === "done" ? "Running again" : "Retrying", {
+        action: { label: "Open", onClick: () => navigate(`/runs/${runId}`) },
+      });
     } catch (e) {
       errorToast(e);
     }
@@ -147,7 +155,7 @@ function RunRow({ run }: { run: RunSummary }) {
       className={s.row}
       role="link"
       tabIndex={0}
-      aria-label={`Open ${run.name}`}
+      aria-label={`Open ${name}`}
       onClick={open}
       onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && open()}
     >
@@ -166,11 +174,11 @@ function RunRow({ run }: { run: RunSummary }) {
       </div>
 
       <div className={s.main}>
-        <div className={s.name} title={run.name}>
+        <div className={s.name} title={name}>
           <span className={s.kind} title={run.kind === "workflow" ? "Workflow" : "Create"}>
             <KindIcon size={14} />
           </span>
-          {run.name}
+          {name}
         </div>
         <div
           className={cx(
@@ -202,7 +210,7 @@ function RunRow({ run }: { run: RunSummary }) {
           </IconButton>
         ) : (
           <>
-            <IconButton label="Run again" onClick={runAgain}>
+            <IconButton label={again.label} title={again.title} onClick={runAgain}>
               <RotateCcw size={16} />
             </IconButton>
             <IconButton label="Remove from history (images stay in their folder)" onClick={remove}>

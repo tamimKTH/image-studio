@@ -5,8 +5,10 @@ import { AlertTriangle, ArrowLeft, Pencil, RotateCcw, Square } from "lucide-reac
 import { api, type OutputImage, type RunDetail, type RunStatus } from "../lib/api";
 import { useRun } from "../lib/events";
 import { duration, plural } from "../lib/format";
+import { useResolvedTheme } from "../lib/prefs";
+import { stepLabel } from "../components/media/ImageCard";
 import { Button, Empty, IconButton, Spinner, cx, toast } from "../components/ui";
-import { toFlowEdges, toFlowNodes, topoOrder } from "../flow/graph";
+import { runProgress, toFlowEdges, toFlowNodes, topoOrder } from "../flow/graph";
 import { FlowContext, nodeTypes, type FlowContextValue } from "../flow/nodes";
 import { OutputLightbox } from "../flow/OutputLightbox";
 import { CreateRunView } from "./CreateRun";
@@ -70,6 +72,7 @@ function WorkflowRun({ run }: { run: RunDetail }) {
   const navigate = useNavigate();
   const active = run.status === "queued" || run.status === "running";
   const elapsed = useElapsed(run);
+  const theme = useResolvedTheme();
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState<{ outputs: OutputImage[]; index: number } | null>(null);
 
@@ -136,10 +139,12 @@ function WorkflowRun({ run }: { run: RunDetail }) {
     }
   }
 
-  const progress = run.status === "done" ? 1 : run.progress;
+  const progress = runProgress(run);
+  // The step belongs to the node that is running now; once it is done, no stale step is shown.
+  const current = active && run.current && run.nodes[run.current.nodeId]?.status === "running" ? run.current : null;
   const detail =
     `${run.done} of ${plural(run.total, "image")}` +
-    (active && run.current?.steps ? ` · Step ${run.current.step} of ${run.current.steps}` : "") +
+    (current ? ` · ${stepLabel(current.step, current.steps)}` : "") +
     (elapsed ? ` · ${duration(elapsed)}` : "");
 
   return (
@@ -151,6 +156,7 @@ function WorkflowRun({ run }: { run: RunDetail }) {
         <div className={s.runHead}>
           <div className={s.runTitleRow}>
             <span className={s.runName}>{run.name}</span>
+            {run.number ? <span className={s.runNumber}>Run {run.number}</span> : null}
             <span className={cx(s.statusChip, s[`st_${run.status}`])}>{STATUS_LABEL[run.status]}</span>
           </div>
           <div className={s.progressRow}>
@@ -188,6 +194,7 @@ function WorkflowRun({ run }: { run: RunDetail }) {
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
+              colorMode={theme}
               nodesDraggable={false}
               nodesConnectable={false}
               elementsSelectable={false}

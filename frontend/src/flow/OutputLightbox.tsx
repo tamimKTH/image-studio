@@ -1,4 +1,4 @@
-// Lightbox for a node's results, with "Use in Create" and "Move to Trash".
+// Lightbox for a node's results, with "Use in Create" and "Delete" (Undo restores the file).
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Trash2 } from "lucide-react";
 import { api, type OutputImage } from "../lib/api";
@@ -27,11 +27,20 @@ export function OutputLightbox({ outputs, index, onIndex }: Props) {
     }
   }
 
-  async function trash(output: OutputImage) {
+  async function remove(output: OutputImage) {
     try {
-      await api.trash(output.path);
+      const { id } = await api.trash(output.path);
       onIndex(null);
-      toast("Moved to the Trash");
+      toast("Deleted", {
+        action: {
+          label: "Undo",
+          onClick: () =>
+            api
+              .restore(id)
+              .then(() => toast("Restored"))
+              .catch((e: Error) => toast(e.message, { tone: "error" })),
+        },
+      });
     } catch (e) {
       toast((e as Error).message, { tone: "error" });
     }
@@ -50,8 +59,8 @@ export function OutputLightbox({ outputs, index, onIndex }: Props) {
             <Button variant="primary" icon={<Sparkles size={16} />} onClick={() => useInCreate(output)}>
               Use in Create
             </Button>
-            <Button variant="ghost" icon={<Trash2 size={16} />} onClick={() => trash(output)}>
-              Move to Trash
+            <Button variant="ghost" icon={<Trash2 size={16} />} onClick={() => remove(output)}>
+              Delete
             </Button>
           </>
         );

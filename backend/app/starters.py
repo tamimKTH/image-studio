@@ -19,10 +19,7 @@ def _edge(source: str, target: str) -> dict:
 
 
 STARTERS = {
-    "blank": ("Untitled workflow", lambda: {
-        "nodes": [_image("i1", 0, 0),
-                  {"id": "g1", "type": "generate", "position": {"x": STEP, "y": 0}, "data": generate_data("", ["i1"])}],
-        "edges": [_edge("i1", "g1")]}),
+    "blank": ("Untitled workflow", lambda: {"nodes": [], "edges": []}),
     "combine": ("Combine two images", lambda: {
         "nodes": [_image("i1", 0, -120), _image("i2", 0, 120),
                   {"id": "g1", "type": "generate", "position": {"x": STEP, "y": 0},
@@ -30,7 +27,8 @@ STARTERS = {
         "edges": [_edge("i1", "g1"), _edge("i2", "g1")]}),
     "cutout": ("Cut out and restage", lambda: {
         "nodes": [_image("i1", 0, 0),
-                  {"id": "r1", "type": "removeBackground", "position": {"x": STEP, "y": 0}, "data": {"folder": None}},
+                  {"id": "r1", "type": "removeBackground", "position": {"x": STEP, "y": 0},
+                   "data": {"folder": None, "quality": "standard"}},
                   {"id": "g1", "type": "generate", "position": {"x": STEP * 2, "y": 0},
                    "data": generate_data("Place the subject from image 1 on a clean studio backdrop with soft shadows", ["r1"])}],
         "edges": [_edge("i1", "r1"), _edge("r1", "g1")]}),

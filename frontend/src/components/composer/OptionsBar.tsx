@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { Copy, Image as ImageIcon, SlidersHorizontal } from "lucide-react";
 import type { Aspect, GenerateSettings } from "../../lib/api";
 import { Chip, IconButton, Popover, Segmented, cx, usePopover } from "../ui";
-import { MoreSettings, hasAdvancedChanges } from "./MoreSettings";
+import { MoreSettings, hasAdvancedChanges, prefetchOptions } from "./MoreSettings";
 import s from "./composer.module.css";
 
 export const ASPECTS: { value: Exclude<Aspect, "auto">; label: string; w: number; h: number }[] = [
@@ -37,6 +38,8 @@ export function OptionsBar({ value, onChange, hasImages }: Props) {
   const count = usePopover();
   const more = usePopover<HTMLButtonElement>();
   const set = (patch: Partial<GenerateSettings>) => onChange({ ...value, ...patch });
+  // The engine's samplers are ready by the time More opens.
+  useEffect(() => void prefetchOptions(), []);
 
   const effective = value.aspect === "auto" && !hasImages ? "1:1" : value.aspect;
   const aspectLabel = effective === "auto" ? "Match image 1" : effective;

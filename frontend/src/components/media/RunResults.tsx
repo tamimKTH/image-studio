@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   api,
+  defaultAdvanced,
   type Asset,
   type Aspect,
   type GenerateNodeData,
@@ -15,7 +16,7 @@ import {
 import { useLive, usePreview } from "../../lib/events";
 import { timeAgo } from "../../lib/format";
 import { toast } from "../ui";
-import { ImageCard } from "./ImageCard";
+import { ImageCard, stepLabel } from "./ImageCard";
 import s from "./runResults.module.css";
 
 export const isActive = (status: RunStatus) => status === "queued" || status === "running";
@@ -61,12 +62,13 @@ export function settingsSummary(run: RunDetail | undefined): string {
   if (!g) return "";
   const hasInputs = runInputs(run).length > 0;
   const aspect = g.aspect === "auto" ? (hasInputs ? "Matches image 1" : "1:1") : g.aspect;
+  const customSteps = g.advanced?.steps;
   return [
     g.size === "2k" ? "2K" : "1K",
     aspect,
     g.count > 1 ? `×${g.count}` : null,
     g.transparent ? "Transparent" : null,
-    g.quality === "fast" ? "Fast" : g.quality === "best" ? "Best quality" : null,
+    customSteps ? `${customSteps} steps` : g.quality === "fast" ? "Fast" : g.quality === "best" ? "Best quality" : null,
     hasInputs ? `${runInputs(run).length} input${runInputs(run).length === 1 ? "" : "s"}` : null,
   ]
     .filter(Boolean)
@@ -121,9 +123,9 @@ export function runStatusText(summary: RunSummary, detail: RunDetail | undefined
   if (summary.status === "running") {
     const slots = runSlots(summary, detail);
     const index = slots.findIndex((sl) => sl.state === "running");
-    if (index < 0) return { text: "In queue", tone: "running" };
+    if (index < 0) return { text: "Waiting for the engine…", tone: "running" };
     const current = slots[index];
-    const step = current.steps ? `Step ${current.step} of ${current.steps}` : "Loading the model…";
+    const step = stepLabel(current.step, current.steps);
     return { text: slots.length > 1 ? `Image ${index + 1} of ${slots.length} · ${step}` : step, tone: "running" };
   }
   if (summary.status === "failed") return { text: `Failed${summary.error ? ` — ${summary.error}` : ""}`, tone: "failed" };
@@ -216,6 +218,40 @@ export async function primeRun(runId: string) {
   }
 }
 
+/**
+ * Starts a run like this one and returns its id.
+ * A finished run is made again from scratch (new seeds unless one was fixed);
+ * a failed or canceled run is resumed, keeping the images it already made.
+ */
+export async function runAgain(run: RunSummary): Promise<string> {
+  if (run.status !== "done") return (await api.retryRun(run.id)).runId;
+  if (run.kind === "workflow" && run.workflowId) return (await api.runWorkflow(run.workflowId)).runId;
+  const detail = await api.run(run.id);
+  const images = runInputs(detail).map((o) => o.id);
+  if (workNodeId(detail) === "cut") return (await api.removeBackground(images[0], detail.folder)).runId;
+  const g = generateData(detail);
+  if (!g) return (await api.retryRun(run.id)).runId;
+  const { runId } = await api.create({
+    prompt: g.prompt,
+    images,
+    folder: detail.folder,
+    aspect: g.aspect,
+    size: g.size,
+    quality: g.quality,
+    count: g.count,
+    transparent: g.transparent,
+    advanced: { ...defaultAdvanced, ...g.advanced },
+  });
+  return runId;
+}
+
+/** "Run again" for a finished run, "Retry" (resume) for a failed or canceled one. */
+export function runAgainLabel(run: RunSummary): { label: string; title: string } {
+  return run.status === "done"
+    ? { label: "Run again", title: "Make it again with the same settings" }
+    : { label: "Retry", title: "Run what didn't finish — images already made are kept" };
+}
+
 /** Asset for a result (to use it as an input). */
 export async function outputAsset(output: OutputImage): Promise<Asset> {
   try {
@@ -234,19 +270,51 @@ export function downloadFile(url: string, name: string) {
   a.remove();
 }
 
-/** Moves results to the Mac Trash and remembers them so they disappear from the page. */
+/**
+ * Deletes an image into the app's trash (kept 30 days) and offers Undo in a toast.
+ * Returns true when the image was deleted.
+ */
+export async function deleteImage(
+  path: string,
+  { onDeleted, onRestored }: { onDeleted?: () => void; onRestored?: () => void } = {},
+): Promise<boolean> {
+  let id: string | undefined;
+  try {
+    id = (await api.trash(path))?.id;
+  } catch (e) {
+    toast((e as Error).message, { tone: "error" });
+    return false;
+  }
+  onDeleted?.();
+  const restore = async () => {
+    try {
+      await api.restore(id!);
+      onRestored?.();
+      toast("Restored");
+    } catch (e) {
+      const missing = /not found|404/i.test((e as Error).message);
+      toast(missing ? "Can't undo here — the image is kept in the app's trash folder for 30 days" : (e as Error).message, {
+        tone: "error",
+      });
+    }
+  };
+  toast("Deleted", id ? { action: { label: "Undo", onClick: () => void restore() } } : {});
+  return true;
+}
+
+/** Deletes results (with Undo) and remembers them so they disappear from the page until restored. */
 export function useTrash() {
   const [trashed, setTrashed] = useState<ReadonlySet<string>>(new Set());
-  async function trash(path: string): Promise<boolean> {
-    try {
-      await api.trash(path);
-      setTrashed((prev) => new Set(prev).add(path));
-      toast("Moved to Trash");
-      return true;
-    } catch (e) {
-      toast((e as Error).message, { tone: "error" });
-      return false;
-    }
+  function trash(path: string): Promise<boolean> {
+    return deleteImage(path, {
+      onDeleted: () => setTrashed((prev) => new Set(prev).add(path)),
+      onRestored: () =>
+        setTrashed((prev) => {
+          const next = new Set(prev);
+          next.delete(path);
+          return next;
+        }),
+    });
   }
   return { trashed, trash };
 }
