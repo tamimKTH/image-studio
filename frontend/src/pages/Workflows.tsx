@@ -18,7 +18,7 @@ import {
 import { api, type RunSummary, type WorkflowSummary } from "../lib/api";
 import { useRunList } from "../lib/events";
 import { plural, timeAgo } from "../lib/format";
-import { inTextField, shortcut } from "../lib/keys";
+import { inTextField, isMac, shortcut } from "../lib/keys";
 import { Button, Empty, IconButton, Menu, Modal, Popover, ProgressRing, Spinner, cx, inputClass, textareaClass, toast, usePopover } from "../components/ui";
 import { copyWorkflow, exportWorkflowFile, isWorkflowExport, jsonFileIn, readWorkflowFile } from "../flow/transfer";
 import s from "./workflows.module.css";
@@ -77,22 +77,32 @@ export function Workflows() {
 
   // Paste (⌘V / Ctrl+V) a copied workflow anywhere on this page.
   useEffect(() => {
-    const onPaste = (e: ClipboardEvent) => {
-      if (inTextField(e) || document.querySelector('[aria-modal="true"]')) return;
-      const text = e.clipboardData?.getData("text/plain");
-      if (!text) return;
+    const pasteText = (text: string | undefined, e: Event) => {
+      if (!text || inTextField(e) || document.querySelector('[aria-modal="true"]')) return false;
       let data: unknown;
       try {
         data = JSON.parse(text);
       } catch {
-        return;
+        return false;
       }
-      if (!isWorkflowExport(data)) return;
-      e.preventDefault();
+      if (!isWorkflowExport(data)) return false;
       importData(data, "Pasted").catch((err: Error) => toast(err.message, { tone: "error" }));
+      return true;
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      if (pasteText(e.clipboardData?.getData("text/plain"), e)) e.preventDefault();
+    };
+    // On a Mac only ⌘V fires a paste event; Ctrl+V (Windows habit) reads the clipboard directly.
+    const onKey = (e: KeyboardEvent) => {
+      if (!isMac || !e.ctrlKey || e.metaKey || e.key.toLowerCase() !== "v" || inTextField(e)) return;
+      navigator.clipboard.readText().then((text) => pasteText(text, e), () => undefined);
     };
     document.addEventListener("paste", onPaste);
-    return () => document.removeEventListener("paste", onPaste);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("paste", onPaste);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [importData]);
 
   async function createFrom(starter: Starter) {

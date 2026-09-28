@@ -536,11 +536,15 @@ async def cancel_run(run_id: str) -> Response:
     return Response(status_code=204)
 
 
+class RetryBody(BaseModel):
+    fresh: bool = False  # True: make every image again (Run again); False: resume (Retry)
+
+
 @router.post("/runs/{run_id}/retry")
-async def retry_run(run_id: str) -> dict:
+async def retry_run(run_id: str, body: RetryBody | None = None) -> dict:
     get_run(run_id)
     try:
-        return {"runId": executor.retry(run_id)}
+        return {"runId": executor.retry(run_id, fresh=bool(body and body.fresh))}
     except GraphError as e:
         raise HTTPException(400, str(e)) from e
 

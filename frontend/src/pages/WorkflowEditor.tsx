@@ -117,19 +117,24 @@ function keepCopied(clip: NodeClipboard) {
   }
 }
 
+/** The newest copy wins: the system clipboard (it may come from another tab); this tab's copy only when it can't be read. */
 async function copiedNodes(): Promise<NodeClipboard | null> {
+  let text: string;
   try {
-    const kept = JSON.parse(sessionStorage.getItem(BUFFER_KEY) ?? "null");
-    if (isNodeClipboard(kept)) return kept;
+    text = await navigator.clipboard.readText();
   } catch {
-    /* fall through to the system clipboard */
+    try {
+      const kept = JSON.parse(sessionStorage.getItem(BUFFER_KEY) ?? "null");
+      return isNodeClipboard(kept) ? kept : null;
+    } catch {
+      return null;
+    }
   }
   try {
-    const text = await navigator.clipboard.readText();
     const data = JSON.parse(text);
     return isNodeClipboard(data) ? data : null;
   } catch {
-    return null;
+    return null; // something else was copied since
   }
 }
 
@@ -329,6 +334,8 @@ function Editor({ workflow }: { workflow: Workflow }) {
   }
 
   function addFromToolbar(type: NodeType) {
+    // Space pans the canvas; a toolbar button left focused would be pressed again by it.
+    (document.activeElement as HTMLElement | null)?.blur();
     const selected = nodesRef.current.filter((n) => n.selected);
     if ((type === "generate" || type === "removeBackground") && selected.length === 1 && selected[0].type !== "note") {
       // Continue from the selected node: to its right, on the same row when there is room.
@@ -466,6 +473,7 @@ function Editor({ workflow }: { workflow: Workflow }) {
   // ---------- run ----------
   const run = useCallback(async () => {
     if (runningRef.current) return;
+    (document.activeElement as HTMLElement | null)?.blur(); // Space (pan) must not press Run again
     const problem = validate(nodesRef.current, edgesRef.current);
     if (problem) {
       toast(problem.message, { tone: "error" });

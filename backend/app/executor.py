@@ -264,12 +264,13 @@ class Executor:
         self._advance(run_id)
         return run_id
 
-    def retry(self, run_id: str) -> str:
+    def retry(self, run_id: str, fresh: bool = False) -> str:
+        """Starts the run's own graph again. Resumes by default (finished images are kept); `fresh` makes everything anew."""
         run = db.one("SELECT * FROM runs WHERE id = ?", (run_id,))
         if not run:
             raise GraphError("That run no longer exists")
         reuse = {}
-        for r in db.all_rows("SELECT * FROM run_nodes WHERE run_id = ? AND status = 'done'", (run_id,)):
+        for r in [] if fresh else db.all_rows("SELECT * FROM run_nodes WHERE run_id = ? AND status = 'done'", (run_id,)):
             ids = json.loads(r["outputs"])
             assets = db.assets_by_ids(ids)
             if ids and all(i in assets and Path(assets[i]["path"]).is_file() for i in ids):
@@ -632,8 +633,12 @@ class Executor:
 
     # ---------- idle unload ----------
     async def unload_when_idle(self) -> None:
+        last_purge = time.time()
         while True:
             await asyncio.sleep(30)
+            if time.time() - last_purge >= 3600:  # the app runs for weeks: empty the 30-day trash hourly, not only at startup
+                last_purge = time.time()
+                files.purge_trash()
             if self.jobs or self.unloaded or not engine.online or config.IDLE_UNLOAD_SECONDS <= 0:
                 continue
             if time.time() - self.last_activity >= config.IDLE_UNLOAD_SECONDS:

@@ -22,10 +22,19 @@ The engine starts again by itself at login, and Docker restarts the app when Doc
 
 | Place | What it is for |
 |---|---|
-| **Create** | One prompt box. Drop or paste images: they are numbered 1, 2, 3…, and the prompt can say "put image 2 on the table in image 1". Press **Generate** (⌘↵). Each image forms live, with a step count. |
-| **Workflows** | Chains on a canvas: Image → Generate → Generate → Remove background… Each Generate takes up to 10 inputs, and its result feeds the next node. Workflows can be run, edited, duplicated, copied (⌘V pastes one back), imported and deleted (with Undo). |
-| **Activity** | Every run, with live progress ("Generating image 2 of 5 · Step 12 of 28"). Runs continue in the background; open one to see each node's state. You can cancel a run, or run it again (finished steps are reused). |
-| **Library** | The folders images are saved to, with their images. Browse the Mac, make a new folder, and choose where new images go. |
+| **Create** | One prompt box. Drop or paste images: they are numbered 1, 2, 3…, and the prompt can say "put image 2 on the table in image 1". Press **Generate** (⌘↵ or Ctrl+Enter). Each image forms live, with a step count. |
+| **Workflows** | Chains on a canvas: Image → Generate → Generate → Remove background, plus sticky **Notes**. Each Generate takes up to 10 inputs, and its result feeds the next node. More below. |
+| **Activity** | Every run, with live progress ("Generating image 2 of 5 · Step 12 of 28"). Runs continue in the background; open one to see each node's state. **Cancel** stops a run. **Retry** resumes a failed or canceled run, keeping the images already made. **Run again** makes a finished run's images anew. |
+| **Library** | The folders images are saved to, with their images. Browse the Mac, make a new folder, and choose where new images go. **Delete** moves an image to the app's trash with Undo; it is kept 30 days. |
+
+**On the canvas** (⌘ or Ctrl: both work on every keyboard):
+
+- **Selecting:** drag on empty canvas to select an area. Shift-click adds a node to the selection.
+- **Moving around:** Space-drag, scroll, or the middle or right mouse moves the canvas; ⌘/Ctrl + scroll zooms.
+- **Copying:** ⌘/Ctrl + C copies the selection, X cuts it, V pastes it (also into another workflow), and D duplicates it.
+- **Connections:** click one and press Delete to remove it. Drag its end onto another node to move it, and drag from a node's dot onto a card to connect.
+- **Undo:** ⌘/Ctrl + Z undoes, ⇧⌘/Ctrl + Z redoes.
+- **Workflows:** can be run, edited, duplicated, copied (⌘/Ctrl + V on the Workflows page pastes one back), exported to a `.studio.json` file, imported from a file, and deleted with Undo.
 
 Model features in the app:
 
@@ -53,6 +62,7 @@ Browser ─▶ http://127.0.0.1:4747  Docker container "image-studio" (FastAPI +
   - `engine/`: ComfyUI and its Python environment
   - `io/`: the engine's working folders
   - `app/`: `studio.db`, uploads and thumbnails
+  - `trash/`: deleted images, kept 30 days (Undo restores them). Docker cannot reach the macOS Trash.
   - `logs/`
 - **Default save folder:** `~/Pictures/Image Studio`.
 - **Models** are read from `~/ComfyUI-Shared/models`, shared with Comfy Desktop:
@@ -77,7 +87,8 @@ Comfy Desktop has the same VAE problem: its edits look grey unless it is started
 | Red dot at the bottom left: engine offline | `./studio start` |
 | First image after a pause is slow | The models load on first use: about 40 s, then 1K Standard takes about 1.5 min |
 | Memory | After 10 idle minutes the app unloads the models (about 40 GB) |
-| A run shows "Interrupted by an app restart" | Press **Run again**; finished steps are reused |
+| A run shows "Interrupted by an app restart" | Press **Retry**; finished steps are reused |
+| Deleted an image by mistake | Press **Undo** on the toast, or take it back from `~/Library/Application Support/ImageStudio/trash` within 30 days |
 
 ## Project
 

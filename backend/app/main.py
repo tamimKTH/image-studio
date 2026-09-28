@@ -44,7 +44,8 @@ class LocalOnly:
             problem = None
             if _host_name(headers.get("host", "")) not in LOCAL_HOSTS:
                 problem = (400, "Open Image Studio at http://127.0.0.1:4747")
-            elif scope["method"] not in SAFE_METHODS and origin is not None and _host_name(urlsplit(origin).netloc) not in LOCAL_HOSTS:
+            elif scope["method"] not in SAFE_METHODS and origin is not None and urlsplit(origin).netloc.lower() != headers.get("host", "").lower():
+                # Changes may only come from this very page (same host and port), not from another local site.
                 problem = (403, "Other websites can't use Image Studio")
             elif (scope["path"].startswith("/api/") and headers.get("sec-fetch-site") == "cross-site"
                   and headers.get("sec-fetch-mode") != "navigate"):
@@ -52,6 +53,16 @@ class LocalOnly:
             if problem:
                 await JSONResponse({"error": problem[1]}, status_code=problem[0])(scope, receive, send)
                 return
+
+            async def send_no_framing(message: dict) -> None:
+                # Other sites may not show the app inside their pages (clickjacking).
+                if message["type"] == "http.response.start":
+                    message["headers"] = [*message.get("headers", []), (b"x-frame-options", b"DENY"),
+                                          (b"content-security-policy", b"frame-ancestors 'none'")]
+                await send(message)
+
+            await self.app(scope, receive, send_no_framing)
+            return
         await self.app(scope, receive, send)
 
 

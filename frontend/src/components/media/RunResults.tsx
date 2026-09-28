@@ -2,14 +2,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   api,
-  defaultAdvanced,
   type Asset,
   type Aspect,
   type GenerateNodeData,
   type NodeState,
   type NodeStatus,
   type OutputImage,
-  type RemoveBackgroundNodeData,
   type RunDetail,
   type RunStatus,
   type RunSummary,
@@ -220,33 +218,12 @@ export async function primeRun(runId: string) {
 }
 
 /**
- * Starts a run like this one and returns its id.
+ * Starts this run's own graph again and returns the new run's id.
  * A finished run is made again from scratch (new seeds unless one was fixed);
  * a failed or canceled run is resumed, keeping the images it already made.
  */
 export async function runAgain(run: RunSummary): Promise<string> {
-  if (run.status !== "done") return (await api.retryRun(run.id)).runId;
-  if (run.kind === "workflow" && run.workflowId) return (await api.runWorkflow(run.workflowId)).runId;
-  const detail = await api.run(run.id);
-  const images = runInputs(detail).map((o) => o.id);
-  if (workNodeId(detail) === "cut") {
-    const cut = detail.graph.nodes.find((n) => n.id === "cut")?.data as RemoveBackgroundNodeData | undefined;
-    return (await api.removeBackground(images[0], detail.folder, cut?.quality)).runId;
-  }
-  const g = generateData(detail);
-  if (!g) return (await api.retryRun(run.id)).runId;
-  const { runId } = await api.create({
-    prompt: g.prompt,
-    images,
-    folder: detail.folder,
-    aspect: g.aspect,
-    size: g.size,
-    quality: g.quality,
-    count: g.count,
-    transparent: g.transparent,
-    advanced: { ...defaultAdvanced, ...g.advanced },
-  });
-  return runId;
+  return (await api.retryRun(run.id, run.status === "done")).runId;
 }
 
 /** "Run again" for a finished run, "Retry" (resume) for a failed or canceled one. */

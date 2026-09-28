@@ -339,7 +339,8 @@ export const api = {
   runs: (limit = 60) => request<RunSummary[]>("GET", `/api/runs?${q({ limit })}`),
   run: (id: string) => request<RunDetail>("GET", `/api/runs/${id}`),
   cancelRun: (id: string) => request<void>("POST", `/api/runs/${id}/cancel`),
-  retryRun: (id: string) => request<{ runId: string }>("POST", `/api/runs/${id}/retry`),
+  /** Starts the run's own graph again: `fresh` makes every image anew; otherwise finished images are kept. */
+  retryRun: (id: string, fresh = false) => request<{ runId: string }>("POST", `/api/runs/${id}/retry`, { fresh }),
   deleteRun: (id: string) => request<void>("DELETE", `/api/runs/${id}`),
 };
 

@@ -15,7 +15,7 @@ Open `http://localhost:4747`. Four places, always one click away:
 4. **Recognition over recall.** Current values are visible chips; folders are named places with previews, not typed paths.
 5. **Direct manipulation.** Drag images in, drag to reorder inputs, drag to connect nodes.
 6. **Calm, immediate feedback.** Everything that runs shows a live preview, step count and progress; nothing blocks the screen.
-7. **Forgiving.** Undo and redo in the editor; delete shows an Undo toast; deleted images go to the Mac Trash.
+7. **Forgiving.** Undo and redo in the editor; delete shows an Undo toast; deleted images wait 30 days in the app's trash (Docker cannot reach the Mac Trash).
 8. **Consistency.** The same prompt box, option chips and folder picker are used in Create and in the node panel.
 9. **Little chrome.** Four navigation items; menus are at most one level deep; no settings page.
 10. **Accessible.** Keyboard shortcuts, visible focus, WCAG AA contrast, `prefers-reduced-motion` and `prefers-color-scheme` respected.
@@ -96,7 +96,9 @@ Browser ──http://127.0.0.1:4747──▶ Docker container "image-studio"
 - **R9:** Workflows can be created (blank or from 3 starters), renamed, duplicated, copied as JSON to the clipboard, pasted or imported, deleted with Undo, and run.
 - **R10:** Several runs, from Create and from workflows, can be active at once. The engine processes them first in, first out, and each run keeps its own progress. Runs continue when the browser is closed.
 - **R11:** Activity lists running runs first, with live progress: images done / total, current node step x/y, and a live preview. Opening a run shows the canvas with each node's state and results.
-- **R12:** A failed node skips the nodes downstream of it, while other branches finish. Cancel stops queued and running work. Run again copies the run; results that are already done are reused.
+- **R12:** A failed node skips the nodes downstream of it, while other branches finish. Cancel stops queued and running work.
+  - **Run again** (on a finished run) makes the run's own saved graph again from scratch, even if the workflow was edited or deleted since.
+  - **Retry** (on a failed or canceled run) resumes it, reusing the images already made.
 - **R13:** Every saved image has its prompt and settings in PNG text metadata, and appears in the Library of its folder.
 - **R14:** The engine status is always visible: online, working or offline, with a one-line fix. If the engine is offline, generation waits and resumes.
 - **R15:** After 10 minutes idle the backend asks the engine to unload models, which frees about 40 GB of RAM.
@@ -143,7 +145,8 @@ SQLite `studio.db`. All ids are 12-character url-safe random strings; all times 
      "autoImprove": false, "folder": null,
      "advanced": {"seed": null, "negative": "", "cfg": null, "steps": null,
                   "sampler": "euler", "scheduler": "simple", "refDetail": "standard"}}},
-  {"id": "r1", "type": "removeBackground", "position": {"x": 640, "y": 0}, "data": {"folder": null}}],
+  {"id": "r1", "type": "removeBackground", "position": {"x": 640, "y": 0}, "data": {"folder": null, "quality": "standard"}},
+  {"id": "t1", "type": "note", "position": {"x": 0, "y": 300}, "data": {"text": "Why this chain exists", "color": "yellow"}}],
  "edges": [{"id": "e1", "source": "a1", "target": "g1"}]}
 ```
 - **Field values:**
@@ -181,7 +184,7 @@ SQLite `studio.db`. All ids are 12-character url-safe random strings; all times 
   - `GET /api/assets/{id}` → asset (`url` = `/api/file?path=…`)
 - **Generation**
   - `POST /api/create {prompt, images:[assetId], aspect,size,quality,count,transparent,folder,advanced}` → `{runId}`
-  - `POST /api/remove-background {asset, folder?}` → `{runId}`
+  - `POST /api/remove-background {asset, folder?, quality?}` → `{runId}`
   - `POST /api/enhance {prompt, images:[assetId]}` → `{prompt, aspect|null, matchImage:bool}`
 - **Workflows**
   - `GET /api/workflows` → `[{id,name,updatedAt,nodeCount,cover,lastRun:{id,status,total,done}|null}]`
@@ -192,11 +195,11 @@ SQLite `studio.db`. All ids are 12-character url-safe random strings; all times 
   - `POST /api/workflows/import` (the export JSON) → workflow
   - `POST /api/workflows/{id}/run` → `{runId}`
 - **Runs**
-  - `GET /api/runs?limit=` → `[RunSummary]`, where `RunSummary = {id,kind,workflowId,name,status,total,done,progress,createdAt,startedAt,finishedAt,error,thumbs:[url],outputs:[{id,url,thumb,path,name}] (up to 12, oldest first),current:{nodeId,step,steps}|null}`
+  - `GET /api/runs?limit=` → `[RunSummary]`, where `RunSummary = {id,kind,workflowId,name,number (nth run of its workflow, null for Create),status,total,done,progress,createdAt,startedAt,finishedAt,error,thumbs:[url],outputs:[{id,url,thumb,path,name}] (up to 12, oldest first),current:{nodeId,step,steps}|null}`
   - **Node ids in Create runs are fixed:** inputs `in1`…`inN`, the Generate node `gen`, and the Remove-background quick action `cut`.
   - `GET /api/runs/{id}` → `RunSummary + {graph, folder, nodes:{nodeId:{status,progress,step,steps,error,outputs:[{id,url,thumb,path,name}]}}}`
   - `POST /api/runs/{id}/cancel`
-  - `POST /api/runs/{id}/retry` → `{runId}`
+  - `POST /api/runs/{id}/retry {fresh?}` → `{runId}`. Without `fresh` it resumes (Retry); with `fresh: true` it makes everything anew (Run again).
   - `DELETE /api/runs/{id}` (removes it from the history; the images stay)
 - **Live events:** `GET /api/events` (Server-Sent Events). Events:
   - `run` (RunSummary)
@@ -227,7 +230,7 @@ SQLite `studio.db`. All ids are 12-character url-safe random strings; all times 
    - Create an asset and a thumbnail, and delete the engine's copy.
 6. **When a node finishes,** its downstream nodes are submitted. On failure, its dependants are `skipped`. The run ends when nothing is left to run.
 7. **Cancel:** queued prompts are deleted with `POST /queue {delete:[ids]}`; running prompts are stopped with `POST /interrupt {prompt_id}`.
-8. **Backend restart:** runs that were active are marked failed with "Interrupted by an app restart"; Run again resumes them.
+8. **Backend restart:** runs that were active are marked failed with "Interrupted by an app restart"; Retry resumes them.
 9. **Prompt graphs** (API format):
    - The loaders are `UnetLoaderGGUF`, `CLIPLoader(type qwen_image)` and `VAELoader`, then `QwenImage21Cache(auto, default)` on the model.
    - Text-to-image: `EmptyLatentImage`. Edit: the encoder's latent output (or `EmptyLatentImage` if an explicit aspect is chosen).
