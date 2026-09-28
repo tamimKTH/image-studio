@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronDown, Folder as FolderIcon, FolderSearch, Star } from "lucide-react";
 import { api } from "../../lib/api";
 import { basename, shortPath } from "../../lib/format";
@@ -23,6 +23,11 @@ export function FolderPicker({ value, onChange, prefix }: Props) {
   const current = value ?? defaultFolder;
   const known = folders.find((f) => f.path === current);
   const name = known?.name ?? (current ? basename(current) : "Default folder");
+
+  // Image counts change as images are saved; reload the list each time it is opened.
+  useEffect(() => {
+    if (pop.open) refresh().catch(() => undefined);
+  }, [pop.open, refresh]);
 
   const sorted = [...folders].sort(
     (a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0),
@@ -85,7 +90,15 @@ export function FolderPicker({ value, onChange, prefix }: Props) {
           ))}
         </div>
         <div className={s.footer}>
-          <Button size="sm" variant="ghost" icon={<FolderSearch size={16} />} onClick={() => setBrowsing(true)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<FolderSearch size={16} />}
+            onClick={() => {
+              pop.close();
+              setBrowsing(true);
+            }}
+          >
             Browse Mac…
           </Button>
         </div>

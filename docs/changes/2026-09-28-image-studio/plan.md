@@ -27,13 +27,22 @@ All paths are relative to `~/Desktop/majed/image-studio` unless stated.
 - Setup: `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`
 - Entry and shared code: `src/main.tsx`, `src/App.tsx`, `src/styles/tokens.css`, `src/lib/{api.ts,events.ts,format.ts,prefs.ts}`
 - Components:
-  - `src/components/ui/*` (the primitives)
+  - `src/components/ui/{index.tsx,ui.module.css}` (the primitives)
   - `src/components/Shell.tsx`
   - `src/components/folders/{FolderPicker,FolderBrowser}.tsx`
   - `src/components/composer/{PromptBox,ImageStrip,OptionsBar,MoreSettings,MarkArea}.tsx`
-  - `src/components/media/{ImageCard,Lightbox,Checker}.tsx`
-- Pages: `src/pages/{Create,Library,Activity,RunView,Workflows,WorkflowEditor}.tsx`
-- Canvas: `src/flow/{nodes.tsx,NodePanel.tsx,useGraph.ts}`
+  - `src/components/media/{ImageCard,Lightbox,RunResults}.tsx`
+  - CSS modules next to each group
+- Shared code: `src/lib/{folders,handoff}.ts`, alongside `api`, `events`, `format` and `prefs`.
+- Pages: `src/pages/{Create,CreateRun,Library,Activity,RunView,Workflows,WorkflowEditor}.tsx`, each with its CSS module.
+- Canvas: `src/flow/{graph.ts,useGraph.ts,nodes.tsx,NodePanel.tsx,DropMenu.tsx,OutputLightbox.tsx,assets.ts,flow.module.css}`
+
+**Departures from this plan during the build** (all recorded here):
+- The Checker component became a global `.checker` class.
+- `RunResults.tsx` is shared by Create and the Create run view.
+- The canvas split into more files.
+- `App.tsx` lazy-loads the editor and the run view, which keeps the main bundle at 357 kB.
+- `./studio` waits for `launchctl bootout` to finish, because a bootstrap straight after it left the engine unloaded.
 
 **Outside the project**
 - `~/Library/LaunchAgents/com.majed.imagestudio.engine.plist` (written by `./studio setup`)

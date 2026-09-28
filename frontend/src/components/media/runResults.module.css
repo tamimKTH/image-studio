@@ -1,0 +1,75 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.headText {
+  min-width: 0;
+}
+
+.prompt {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-weight: 560;
+  line-height: 1.4;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.promptMuted {
+  color: var(--text-2);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+.metaSep::before {
+  content: "·";
+  margin-right: 6px;
+}
+
+.statusRunning {
+  color: var(--accent-soft-text);
+  font-weight: 600;
+}
+
+.statusFailed {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.headActions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+/* One justified row per run: widths follow each image's ratio, so heights match. */
+.cards {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.slot {
+  flex: var(--r) 1 0%;
+  min-width: 0;
+  max-width: calc(var(--maxh) * var(--r));
+}

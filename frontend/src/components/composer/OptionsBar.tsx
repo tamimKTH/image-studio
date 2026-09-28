@@ -14,10 +14,11 @@ export const ASPECTS: { value: Exclude<Aspect, "auto">; label: string; w: number
   { value: "9:16", label: "Tall", w: 9, h: 16 },
 ];
 
-function Shape({ w, h }: { w: number; h: number }) {
-  const scale = 26 / Math.max(w, h);
+function Shape({ w, h, size = 26 }: { w: number; h: number; size?: number }) {
+  const scale = size / Math.max(w, h);
+  const box = size + (size < 20 ? 2 : 10);
   return (
-    <span className={s.ratioShape}>
+    <span className={s.ratioShape} style={{ width: box, height: box }}>
       <span style={{ width: w * scale, height: h * scale }} />
     </span>
   );
@@ -47,8 +48,7 @@ export function OptionsBar({ value, onChange, hasImages }: Props) {
         ref={aspect.anchor}
         onClick={aspect.toggle}
         title="Aspect ratio"
-        icon={effective === "auto" ? <ImageIcon size={15} /> : shape ? <Shape w={shape.w} h={shape.h} /> : null}
-        style={{ paddingLeft: effective === "auto" ? 12 : 6 }}
+        icon={effective === "auto" ? <ImageIcon size={15} /> : shape ? <Shape w={shape.w} h={shape.h} size={14} /> : null}
       >
         {aspectLabel}
       </Chip>

@@ -162,10 +162,19 @@
 .next {
   right: 16px;
 }
-.close {
+.stage .close {
   position: absolute;
   top: 16px;
   left: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.stage .close:hover {
+  background: var(--surface);
 }
 .panel {
   display: flex;

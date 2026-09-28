@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { api, type Aspect } from "../../lib/api";
+import { useLive } from "../../lib/events";
 import { Button, cx, toast } from "../ui";
 import s from "./composer.module.css";
 
@@ -58,6 +59,8 @@ interface ImproveProps {
 /** ✨ Improve: rewrites the prompt with the model's own prompt enhancer. Click again to stop. */
 export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange, size = "sm" }: ImproveProps) {
   const [busy, setBusy] = useState(false);
+  // The improver shares the engine: if an image is being made, it starts right after that one.
+  const [waiting, setWaiting] = useState(false);
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => onBusyChange?.(busy), [busy, onBusyChange]);
@@ -69,6 +72,7 @@ export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange
     }
     const previous = prompt;
     abort.current = new AbortController();
+    setWaiting((useLive.getState().engine?.queue ?? 0) > 0);
     setBusy(true);
     try {
       const r = await api.enhance(prompt, images, abort.current.signal);
@@ -94,9 +98,15 @@ export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange
       loading={false}
       disabled={!prompt.trim() && !busy}
       onClick={run}
-      title={busy ? "Stop improving" : "Rewrite the prompt in rich detail with the model's prompt improver"}
+      title={
+        busy
+          ? waiting
+            ? "Starts right after the image being made now — click to stop"
+            : "Stop improving"
+          : "Rewrite the prompt in rich detail with the model's prompt improver"
+      }
     >
-      {busy ? "Improving… (stop)" : "Improve"}
+      {busy ? (waiting ? "After current image… (stop)" : "Improving… (stop)") : "Improve"}
     </Button>
   );
 }

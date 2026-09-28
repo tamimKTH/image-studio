@@ -98,12 +98,20 @@ write_env() {
   printf 'HOME=%s\nSTUDIO_RUNTIME_DIR=%s\nTZ=%s\n' "$HOME" "$RUNTIME_DIR" "${tz:-UTC}" > .env
 }
 
+engine_loaded() { launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; }
+
+# bootout returns before the service is gone; wait so a following bootstrap loads the new plist.
+unload_engine() {
+  launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+  local i
+  for ((i = 0; i < 40; i++)); do
+    engine_loaded || return 0
+    sleep 0.5
+  done
+}
+
 start_engine() {
-  if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
-    launchctl kickstart "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
-  else
-    launchctl bootstrap "$DOMAIN" "$PLIST"
-  fi
+  engine_loaded || launchctl bootstrap "$DOMAIN" "$PLIST"
   say "Starting the engine…"
   wait_for "$ENGINE_URL/system_stats" 120 || { echo "The engine did not start; see ./studio logs" >&2; exit 1; }
 }
@@ -124,14 +132,14 @@ case "${1:-}" in
     prepare_models
     mkdir -p "$HOME/Pictures/Image Studio"
     write_plist
-    launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+    unload_engine
     start_engine
     start_app
     ;;
   start) start_engine; start_app ;;
   stop)
     docker compose stop || true
-    launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+    unload_engine
     say "Stopped."
     ;;
   status)
