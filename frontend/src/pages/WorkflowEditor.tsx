@@ -268,21 +268,76 @@ function Editor({ workflow }: { workflow: Workflow }) {
     return flow.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
   }, [flow]);
 
+  /**
+   * Pans (and only if needed, zooms out) so the given nodes — default: the selected ones — are on screen.
+   * With `withAll`, the whole graph is kept in view when it fits at the current zoom.
+   */
+  const reveal = useCallback(
+    (ids?: string[], withAll = false) => {
+      requestAnimationFrame(() => {
+        const r = wrapper.current?.getBoundingClientRect();
+        const wanted = nodesRef.current.filter((n) => (ids ? ids.includes(n.id) : n.selected));
+        if (!r || !wanted.length) return;
+        const zoom = flow.getZoom();
+        const bounds = (list: FlowNode[]) =>
+          list.reduce(
+            (b, n) => {
+              const size = nodeSize(n);
+              return {
+                x1: Math.min(b.x1, n.position.x),
+                y1: Math.min(b.y1, n.position.y),
+                x2: Math.max(b.x2, n.position.x + size.width),
+                y2: Math.max(b.y2, n.position.y + size.height),
+              };
+            },
+            { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity },
+          );
+        // Room on screen, clear of the edges and of the toolbar at the bottom.
+        const fits = (b: ReturnType<typeof bounds>) => (b.x2 - b.x1) * zoom < r.width - 48 && (b.y2 - b.y1) * zoom < r.height - 120;
+        const everything = bounds(nodesRef.current);
+        const box = withAll && fits(everything) ? everything : bounds(wanted);
+        const tl = flow.screenToFlowPosition({ x: r.left + 24, y: r.top + 24 });
+        const br = flow.screenToFlowPosition({ x: r.right - 24, y: r.bottom - 96 });
+        if (box.x1 >= tl.x && box.y1 >= tl.y && box.x2 <= br.x && box.y2 <= br.y) return;
+        if (fits(box)) flow.setCenter((box.x1 + box.x2) / 2, (box.y1 + box.y2) / 2 + 36 / zoom, { zoom, duration: 300 });
+        else flow.fitBounds({ x: box.x1, y: box.y1, width: box.x2 - box.x1, height: box.y2 - box.y1 }, { padding: 0.2, duration: 300 });
+      });
+    },
+    [flow, nodesRef],
+  );
+
+  /** Where a toolbar node goes when nothing is selected: images in a column on the left, steps to the right. */
+  function toolbarSpot(type: NodeType) {
+    const all = nodesRef.current;
+    const flowNodes = all.filter((n) => n.type !== "note");
+    const c = viewCenter();
+    if (type === "note" || !flowNodes.length) {
+      const w = type === "note" ? NOTE_SIZE.width : NODE_WIDTH;
+      return freeSpot({ x: c.x - w / 2, y: c.y - nodeHeight(type) / 2 }, type, all);
+    }
+    if (type === "image") {
+      const images = flowNodes.filter((n) => n.type === "image");
+      if (images.length) {
+        const lowest = images.reduce((a, b) => (b.position.y > a.position.y ? b : a));
+        return freeSpot({ x: lowest.position.x, y: lowest.position.y + nodeSize(lowest).height + 40 }, type, all);
+      }
+      const left = flowNodes.reduce((a, b) => (b.position.x < a.position.x ? b : a));
+      return freeSpot({ x: left.position.x - NODE_WIDTH - 90, y: left.position.y }, type, all);
+    }
+    const right = flowNodes.reduce((a, b) => (b.position.x + nodeSize(b).width > a.position.x + nodeSize(a).width ? b : a));
+    return freeSpot({ x: right.position.x + nodeSize(right).width + 90, y: right.position.y }, type, all);
+  }
+
   function addFromToolbar(type: NodeType) {
     const selected = nodesRef.current.filter((n) => n.selected);
     if ((type === "generate" || type === "removeBackground") && selected.length === 1 && selected[0].type !== "note") {
       // Continue from the selected node: to its right, on the same row when there is room.
       const from = selected[0];
       const pos = freeSpot({ x: from.position.x + nodeSize(from).width + 90, y: from.position.y }, type, nodesRef.current);
-      addNode(type, pos, { from: from.id });
-      const x = (from.position.x + pos.x + NODE_WIDTH) / 2;
-      const y = (from.position.y + pos.y + nodeHeight(type)) / 2;
-      flow.setCenter(x, y, { zoom: flow.getZoom(), duration: 300 });
+      reveal([from.id, addNode(type, pos, { from: from.id })], true);
       return;
     }
-    const c = viewCenter();
-    const w = type === "note" ? NOTE_SIZE.width : NODE_WIDTH;
-    addNode(type, freeSpot({ x: c.x - w / 2, y: c.y - nodeHeight(type) / 2 }, type, nodesRef.current));
+    reveal([addNode(type, toolbarSpot(type))], true);
   }
 
   const addImages = useCallback(
@@ -375,9 +430,12 @@ function Editor({ workflow }: { workflow: Workflow }) {
       if (p && r && p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) at = flow.screenToFlowPosition(p);
       else at = { x: Math.min(...clip.nodes.map((n) => n.position?.x ?? 0)), y: Math.min(...clip.nodes.map((n) => n.position?.y ?? 0)) };
       const count = paste(clip, at);
-      if (count) toast(`Pasted ${plural(count, "node")}`);
+      if (count) {
+        toast(`Pasted ${plural(count, "node")}`);
+        reveal(); // the pasted nodes are the selection
+      }
     },
-    [flow, paste],
+    [flow, paste, reveal],
   );
 
   // Dropping image files on the canvas makes image nodes where they land.
