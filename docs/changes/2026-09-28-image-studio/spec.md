@@ -102,6 +102,26 @@ Browser ──http://127.0.0.1:4747──▶ Docker container "image-studio"
 - **R15:** After 10 minutes idle the backend asks the engine to unload models, which frees about 40 GB of RAM.
 - **R16:** File APIs only read and write under `${HOME}` or `/Volumes`, never in hidden folders or `~/Library`. The only exception is the app's own runtime folder. The app listens only on 127.0.0.1.
 
+## Round 2 requirements (Majed's follow-up, 2026-09-28)
+- **R17 Notes:** sticky notes on the canvas: add from the toolbar, edit the text in place, pick a colour, resize, move, copy and delete. Notes never run and have no connections.
+- **R18 Box selection:** left-drag on empty canvas draws a selection box that selects every node it touches. Panning is by scrolling / two-finger drag, middle or right mouse drag, or holding Space and dragging. Shift-click adds a node to the selection.
+- **R19 Copy and paste nodes:**
+  - Ctrl or ⌘ + C copies the selected nodes with the connections between them; + X cuts; + V pastes them with new ids, offset, selected.
+  - This works within a workflow and across workflows, through the system clipboard as JSON.
+  - Duplicate is Ctrl or ⌘ + D.
+- **R20 Connections:**
+  - A clicked connection is highlighted and Delete or Backspace removes it.
+  - A removed connection can be made again, to the same node or another.
+  - Reconnecting by dragging a connection's end works.
+  - Generate `data.inputs` stays in sync with every add, remove and reconnect.
+- **R21 Shortcuts on Mac and Windows keyboards:** every shortcut accepts ⌘ or Ctrl. Hints show ⌘ on a Mac and Ctrl elsewhere (`lib/keys.ts`).
+- **R22 Export and import files:** a workflow can be exported to a `.studio.json` file and imported from a file (file picker or drop), besides copy and paste.
+- **R23 Themes:**
+  - Light is fully light and Dark is fully dark, including native controls (`color-scheme`), React Flow parts (controls, edges, labels, selection box, handles), menus, popovers, modals and scrollbars.
+  - System follows macOS or Windows and switches live.
+- **R24 Options match the engine:** the sampler and scheduler menus list exactly what the engine offers (`GET /api/options`), and every option works end to end.
+- **Deleting images:** images go to the app's own trash (`RUNTIME/trash`, kept 30 days), with Undo. Docker cannot reach the macOS Trash.
+
 ## Design: data
 SQLite `studio.db`. All ids are 12-character url-safe random strings; all times are unix seconds (float).
 
@@ -151,7 +171,9 @@ SQLite `studio.db`. All ids are 12-character url-safe random strings; all times 
   - `DELETE /api/folders/{id}` (forgets it; the folder stays on disk)
   - `GET /api/folders/images?path=&offset=&limit=` → `{items:[{path,name,mtime,width,height,thumb,url}], total}`, newest first
   - `GET /api/file?path=` (the image), `GET /api/thumb?path=` (512 px WebP, cached)
-  - `POST /api/files/trash {path}` (moves the file to `~/.Trash`)
+  - `POST /api/files/trash {path}` → `{id}`. Moves the file into the app trash `RUNTIME/trash`, kept 30 days; Docker cannot reach `~/.Trash`.
+  - `POST /api/files/restore {id}` → `{path}` (Undo)
+  - `GET /api/options` → `{samplers, schedulers}`, taken from the engine's KSampler inputs
   - `GET /api/files/info?path=` → `{path,name,width,height,bytes,mtime,meta}`, where `meta` is the PNG `studio` JSON or null
 - **Assets**
   - `POST /api/assets/upload` (multipart `files`, optional `meta`) → `[{id,url,thumb,width,height,hasAlpha,name}]`

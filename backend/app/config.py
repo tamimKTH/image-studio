@@ -16,7 +16,10 @@ ENGINE_URL = os.environ.get("STUDIO_ENGINE_URL", "http://127.0.0.1:8199").rstrip
 _repo_static = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 STATIC_DIR = _path("STUDIO_STATIC_DIR", Path("/srv/static") if Path("/srv/static").is_dir() else _repo_static)
 
-APP_DIR = RUNTIME_DIR / "app"
+# A second (development) backend can share the engine safely: its own app data and its own
+# subfolder in the engine's input/output folders, and idle unloading switched off (0).
+APP_DIR = _path("STUDIO_APP_DIR", RUNTIME_DIR / "app")
+INSTANCE = os.environ.get("STUDIO_INSTANCE", "studio")
 DB_PATH = APP_DIR / "studio.db"
 UPLOADS_DIR = APP_DIR / "uploads"
 THUMBS_DIR = APP_DIR / "thumbs"
@@ -40,4 +43,4 @@ MODEL_LABEL = "Qwen-Image 2.1 Uncensored Q8"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 UPLOAD_EXTENSIONS = IMAGE_EXTENSIONS | {".gif", ".bmp", ".tif", ".tiff", ".heic", ".heif"}
 MAX_INPUTS = 10
-IDLE_UNLOAD_SECONDS = 600
+IDLE_UNLOAD_SECONDS = int(float(os.environ.get("STUDIO_IDLE_MINUTES", "10")) * 60)

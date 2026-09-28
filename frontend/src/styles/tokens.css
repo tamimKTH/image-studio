@@ -56,6 +56,8 @@
   --checker-a: #ffffff;
   --checker-b: #ececf1;
   --canvas-dot: #d4d4dc;
+  /* Native controls (select menus, scrollbars, number inputs) follow the chosen theme too. */
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -83,6 +85,7 @@
     --checker-a: #1c1c22;
     --checker-b: #26262e;
     --canvas-dot: #2c2c35;
+    color-scheme: dark;
   }
 }
 
@@ -110,6 +113,7 @@
   --checker-a: #1c1c22;
   --checker-b: #26262e;
   --canvas-dot: #2c2c35;
+  color-scheme: dark;
 }
 
 *,

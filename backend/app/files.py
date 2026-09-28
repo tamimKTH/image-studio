@@ -208,7 +208,7 @@ def thumbnail(path: Path) -> Path:
 # ---------- engine inputs and results ----------
 def prepare_input(src: Path, flatten: bool = False) -> tuple[EngineInput, Path]:
     """Copies an image into the engine's input folder as PNG (orientation applied); returns it and its path."""
-    name = f"studio/{uuid.uuid4().hex}.png"
+    name = f"{config.INSTANCE}/{uuid.uuid4().hex}.png"
     dest = config.ENGINE_INPUT_DIR / name
     dest.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(src) as im:

@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    for folder in (config.UPLOADS_DIR, config.THUMBS_DIR, config.ENGINE_INPUT_DIR / "studio", config.ENGINE_OUTPUT_DIR):
+    for folder in (config.UPLOADS_DIR, config.THUMBS_DIR, config.ENGINE_INPUT_DIR / config.INSTANCE, config.ENGINE_OUTPUT_DIR):
         folder.mkdir(parents=True, exist_ok=True)
     db.init()
     if db.get_setting("defaultFolder") is None:

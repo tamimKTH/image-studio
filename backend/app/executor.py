@@ -159,12 +159,13 @@ class Executor:
         """Runs that were active when the app stopped can't be resumed in place; they are marked failed (Run again resumes)."""
         now = time.time()
         for row in db.all_rows("SELECT id FROM runs WHERE status IN ('queued', 'running')"):
-            self._orphans = True
+            # Clearing the engine queue would also drop other backends' work; only the main app does it.
+            self._orphans = config.INSTANCE == "studio"
             db.execute("UPDATE run_nodes SET status = 'failed', error = ?, finished_at = ? WHERE run_id = ? AND status IN ('queued', 'running')",
                        (RESTART_MESSAGE, now, row["id"]))
             db.execute("UPDATE run_nodes SET status = 'skipped' WHERE run_id = ? AND status = 'waiting'", (row["id"],))
             db.execute("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", (RESTART_MESSAGE, now, row["id"]))
-        for folder in (config.ENGINE_INPUT_DIR / "studio", config.ENGINE_OUTPUT_DIR / "studio"):
+        for folder in (config.ENGINE_INPUT_DIR / config.INSTANCE, config.ENGINE_OUTPUT_DIR / config.INSTANCE):
             for leftover in folder.glob("*"):
                 if leftover.is_file():
                     leftover.unlink(missing_ok=True)
@@ -372,7 +373,7 @@ class Executor:
                 seed = sampling.seed + i
                 graph = image_graph(engine_prompt, negative, engine_inputs, aspect=aspect, size=size, resolution=resolution,
                                     sampling=Sampling(seed, sampling.steps, sampling.cfg, sampling.sampler, sampling.scheduler),
-                                    prefix=f"studio/{run_id}_{node_id}_{i}")
+                                    prefix=f"{config.INSTANCE}/{run_id}_{node_id}_{i}")
                 jobs.append(await self._submit(Job("image", run_id, node_id, seed=seed, steps=sampling.steps), graph))
 
             meta_base = {"kind": node["type"], "prompt": user_prompt, "negative": negative, "steps": sampling.steps,
@@ -583,7 +584,7 @@ class Executor:
     async def unload_when_idle(self) -> None:
         while True:
             await asyncio.sleep(30)
-            if self.jobs or self.unloaded or not engine.online:
+            if self.jobs or self.unloaded or not engine.online or config.IDLE_UNLOAD_SECONDS <= 0:
                 continue
             if time.time() - self.last_activity >= config.IDLE_UNLOAD_SECONDS:
                 try:

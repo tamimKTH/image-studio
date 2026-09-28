@@ -45,6 +45,7 @@ export const defaultSettings: GenerateSettings = {
 
 export interface Asset {
   id: string;
+  /** The original file name as uploaded or saved (not the internal storage name). */
   name: string;
   path: string;
   url: string;
@@ -126,8 +127,22 @@ export interface Status {
   defaultFolder: string;
 }
 
+/** Sampler and scheduler names the engine actually offers (from its KSampler definition). */
+export interface Options {
+  samplers: string[];
+  schedulers: string[];
+}
+
 // ---- Graph (shared by workflows and runs; the same shape React Flow uses) ----
-export type NodeType = "image" | "generate" | "removeBackground";
+/** "note" is a sticky note on the canvas; it never runs and has no connections. */
+export type NodeType = "image" | "generate" | "removeBackground" | "note";
+
+export type NoteColor = "yellow" | "blue" | "green" | "pink" | "gray";
+
+export interface NoteNodeData {
+  text: string;
+  color: NoteColor;
+}
 
 export interface ImageNodeData {
   asset: string | null;
@@ -144,7 +159,7 @@ export interface RemoveBackgroundNodeData {
   folder: string | null;
 }
 
-export type NodeData = ImageNodeData | GenerateNodeData | RemoveBackgroundNodeData;
+export type NodeData = ImageNodeData | GenerateNodeData | RemoveBackgroundNodeData | NoteNodeData;
 
 export interface GraphNode {
   id: string;
@@ -190,6 +205,8 @@ export interface RunSummary {
   kind: "create" | "workflow";
   workflowId: string | null;
   name: string;
+  /** 1 for a workflow's first run, 2 for the second…; null for Create runs. */
+  number: number | null;
   status: RunStatus;
   total: number;
   done: number;
@@ -284,7 +301,10 @@ export const api = {
   forgetFolder: (id: string) => request<void>("DELETE", `/api/folders/${id}`),
   folderImages: (path: string, offset = 0, limit = 120) =>
     request<{ items: FolderImage[]; total: number }>("GET", `/api/folders/images?${q({ path, offset, limit })}`),
-  trash: (path: string) => request<void>("POST", "/api/files/trash", { path }),
+  /** Deletes an image into the app's own trash (kept 30 days); `restore` puts it back. */
+  trash: (path: string) => request<{ id: string }>("POST", "/api/files/trash", { path }),
+  restore: (id: string) => request<{ path: string }>("POST", "/api/files/restore", { id }),
+  options: () => request<Options>("GET", "/api/options"),
   fileInfo: (path: string) => request<FileInfo>("GET", `/api/files/info?${q({ path })}`),
 
   upload: (files: File[] | Blob[], meta?: Record<string, unknown>) => {
