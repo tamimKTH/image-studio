@@ -170,7 +170,8 @@ SQLite `studio.db`. All ids are 12-character url-safe random strings; all times 
   - `POST /api/workflows/import` (the export JSON) → workflow
   - `POST /api/workflows/{id}/run` → `{runId}`
 - **Runs**
-  - `GET /api/runs?limit=` → `[RunSummary]`, where `RunSummary = {id,kind,workflowId,name,status,total,done,progress,createdAt,startedAt,finishedAt,error,thumbs:[url],current:{nodeId,step,steps}|null}`
+  - `GET /api/runs?limit=` → `[RunSummary]`, where `RunSummary = {id,kind,workflowId,name,status,total,done,progress,createdAt,startedAt,finishedAt,error,thumbs:[url],outputs:[{id,url,thumb,path,name}] (up to 12, oldest first),current:{nodeId,step,steps}|null}`
+  - **Node ids in Create runs are fixed:** inputs `in1`…`inN`, the Generate node `gen`, and the Remove-background quick action `cut`.
   - `GET /api/runs/{id}` → `RunSummary + {graph, folder, nodes:{nodeId:{status,progress,step,steps,error,outputs:[{id,url,thumb,path,name}]}}}`
   - `POST /api/runs/{id}/cancel`
   - `POST /api/runs/{id}/retry` → `{runId}`

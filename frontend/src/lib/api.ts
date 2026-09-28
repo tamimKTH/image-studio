@@ -199,6 +199,8 @@ export interface RunSummary {
   finishedAt: number | null;
   error: string | null;
   thumbs: string[];
+  /** Up to 12 finished images, oldest first. */
+  outputs: OutputImage[];
   current: { nodeId: string; step: number; steps: number } | null;
 }
 
