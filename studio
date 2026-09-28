@@ -1,0 +1,152 @@
+#!/bin/bash
+# Image Studio: set up, start and stop the local image engine and the Docker app.
+#   ./studio setup    install the engine, prepare models, start everything (safe to repeat)
+#   ./studio start    start the engine and the app
+#   ./studio stop     stop both
+#   ./studio status   show what is running
+#   ./studio logs     follow the engine and app logs
+#   ./studio open     open the app in the browser
+set -euo pipefail
+cd "$(dirname "$0")"
+
+RUNTIME_DIR="${STUDIO_RUNTIME_DIR:-$HOME/Library/Application Support/ImageStudio}"
+MODELS_DIR="${STUDIO_MODELS_DIR:-$HOME/ComfyUI-Shared/models}"
+LABEL="com.majed.imagestudio.engine"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+ENGINE_URL="http://127.0.0.1:8199"
+APP_URL="http://127.0.0.1:4747"
+PYTHON="$RUNTIME_DIR/engine/.venv/bin/python"
+DOMAIN="gui/$(id -u)"
+
+say() { printf '\033[1m%s\033[0m\n' "$*"; }
+
+wait_for() { # url seconds
+  local i
+  for ((i = 0; i < $2; i++)); do
+    curl -fs -o /dev/null "$1" && return 0
+    sleep 1
+  done
+  return 1
+}
+
+prepare_models() {
+  local te="$MODELS_DIR/text_encoders"
+  [ -f "$MODELS_DIR/diffusion_models/qwen-image-2.1-UC-Q8_0.gguf" ] || { echo "Missing $MODELS_DIR/diffusion_models/qwen-image-2.1-UC-Q8_0.gguf" >&2; exit 1; }
+  [ -f "$MODELS_DIR/vae/qwen_image_2.1_vae_bf16.safetensors" ] || { echo "Missing $MODELS_DIR/vae/qwen_image_2.1_vae_bf16.safetensors" >&2; exit 1; }
+  # The Apple GPU has no int8 matmul, so int8 text encoders are converted to bf16 once.
+  local pair
+  for pair in "qwen3vl_8b_int8_convrot:qwen3vl_8b" \
+              "qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot:qwen3.5_9b_qwen_image_2.1_pe_t2i" \
+              "qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot:qwen3.5_9b_qwen_image_2.1_pe_i2i"; do
+    local src="$te/${pair%%:*}.safetensors" dst="$te/${pair##*:}.dequant-bf16.safetensors"
+    if [ ! -f "$dst" ] && [ -f "$src" ]; then
+      say "Converting ${pair##*:} for the Apple GPU…"
+      "$PYTHON" engine/dequantize.py "$src" "$dst.part" && mv "$dst.part" "$dst"
+    fi
+  done
+  [ -f "$te/qwen3vl_8b.dequant-bf16.safetensors" ] || { echo "Missing the Qwen3-VL text encoder in $te" >&2; exit 1; }
+  cat > "$RUNTIME_DIR/engine/model-paths.yaml" <<EOF
+studio:
+  base_path: $MODELS_DIR
+  is_default: true
+  diffusion_models: |
+    diffusion_models/
+    unet/
+  text_encoders: |
+    text_encoders/
+    clip/
+  vae: vae/
+EOF
+}
+
+write_plist() {
+  local io="$RUNTIME_DIR/io"
+  mkdir -p "$io/input" "$io/output" "$io/temp" "$io/user" "$RUNTIME_DIR/logs" "$HOME/Library/LaunchAgents"
+  cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$PYTHON</string><string>-s</string><string>$RUNTIME_DIR/engine/ComfyUI/main.py</string>
+    <string>--listen</string><string>127.0.0.1</string><string>--port</string><string>8199</string>
+    <string>--gpu-only</string><string>--cpu-vae</string>
+    <string>--preview-method</string><string>latent2rgb</string><string>--preview-size</string><string>384</string>
+    <string>--disable-api-nodes</string><string>--disable-auto-launch</string>
+    <string>--extra-model-paths-config</string><string>$RUNTIME_DIR/engine/model-paths.yaml</string>
+    <string>--input-directory</string><string>$io/input</string>
+    <string>--output-directory</string><string>$io/output</string>
+    <string>--temp-directory</string><string>$io/temp</string>
+    <string>--user-directory</string><string>$io/user</string>
+  </array>
+  <key>WorkingDirectory</key><string>$RUNTIME_DIR/engine</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>$RUNTIME_DIR/logs/engine.log</string>
+  <key>StandardErrorPath</key><string>$RUNTIME_DIR/logs/engine.log</string>
+</dict>
+</plist>
+EOF
+}
+
+write_env() {
+  local tz
+  tz="$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')"
+  printf 'HOME=%s\nSTUDIO_RUNTIME_DIR=%s\nTZ=%s\n' "$HOME" "$RUNTIME_DIR" "${tz:-UTC}" > .env
+}
+
+start_engine() {
+  if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
+    launchctl kickstart "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+  else
+    launchctl bootstrap "$DOMAIN" "$PLIST"
+  fi
+  say "Starting the engine…"
+  wait_for "$ENGINE_URL/system_stats" 120 || { echo "The engine did not start; see ./studio logs" >&2; exit 1; }
+}
+
+start_app() {
+  write_env
+  say "Starting the app…"
+  docker compose up -d --build
+  wait_for "$APP_URL/api/status" 120 || { echo "The app did not start; see ./studio logs" >&2; exit 1; }
+  say "Image Studio is running: $APP_URL"
+}
+
+main() {
+case "${1:-}" in
+  setup)
+    command -v docker >/dev/null || { echo "Docker Desktop is required" >&2; exit 1; }
+    engine/setup.sh
+    prepare_models
+    mkdir -p "$HOME/Pictures/Image Studio"
+    write_plist
+    launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+    start_engine
+    start_app
+    ;;
+  start) start_engine; start_app ;;
+  stop)
+    docker compose stop || true
+    launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+    say "Stopped."
+    ;;
+  status)
+    if curl -fs "$ENGINE_URL/system_stats" >/dev/null; then echo "engine: online ($ENGINE_URL)"; else echo "engine: offline"; fi
+    if curl -fs "$APP_URL/api/status" >/dev/null; then echo "app: running ($APP_URL)"; else echo "app: not running"; fi
+    ;;
+  logs)
+    tail -n 40 -f "$RUNTIME_DIR/logs/engine.log" &
+    trap 'kill $! 2>/dev/null' EXIT
+    docker compose logs -f --tail 40
+    ;;
+  open) open "$APP_URL" ;;
+  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac
+}
+
+# Sourcing the file (for single steps) defines the functions without running a command.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi

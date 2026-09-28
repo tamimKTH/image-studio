@@ -1,0 +1,208 @@
+/* Design tokens. Light is the default; dark follows the system unless the user picks a theme. */
+:root {
+  --font: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 999px;
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur: 160ms;
+
+  --bg: #f6f6f8;
+  --surface: #ffffff;
+  --surface-2: #f3f3f6;
+  --surface-3: #e9e9ee;
+  --border: #e4e4ea;
+  --border-strong: #d2d2da;
+  --text: #17171c;
+  --text-2: #55555f;
+  --text-3: #8a8a95;
+  --accent: #6b4dff;
+  --accent-hover: #5a38f7;
+  --accent-soft: #efebff;
+  --accent-soft-text: #4b2fd6;
+  --on-accent: #ffffff;
+  --success: #15a34a;
+  --success-soft: #e7f7ec;
+  --warning: #d97706;
+  --warning-soft: #fdf3e2;
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --overlay: rgba(12, 12, 18, 0.45);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06), 0 1px 1px rgba(20, 20, 30, 0.04);
+  --shadow: 0 6px 20px rgba(20, 20, 30, 0.08), 0 1px 3px rgba(20, 20, 30, 0.06);
+  --shadow-lg: 0 24px 64px rgba(20, 20, 30, 0.18), 0 4px 12px rgba(20, 20, 30, 0.08);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  --checker-a: #ffffff;
+  --checker-b: #ececf1;
+  --canvas-dot: #d4d4dc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d11;
+    --surface: #15151a;
+    --surface-2: #1b1b21;
+    --surface-3: #24242c;
+    --border: #25252d;
+    --border-strong: #33333d;
+    --text: #f3f3f6;
+    --text-2: #b3b3bd;
+    --text-3: #7b7b87;
+    --accent: #8a6dff;
+    --accent-hover: #9c84ff;
+    --accent-soft: #231c40;
+    --accent-soft-text: #c3b4ff;
+    --success-soft: #10291a;
+    --warning-soft: #2e2211;
+    --danger-soft: #331414;
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+    --checker-a: #1c1c22;
+    --checker-b: #26262e;
+    --canvas-dot: #2c2c35;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d0d11;
+  --surface: #15151a;
+  --surface-2: #1b1b21;
+  --surface-3: #24242c;
+  --border: #25252d;
+  --border-strong: #33333d;
+  --text: #f3f3f6;
+  --text-2: #b3b3bd;
+  --text-3: #7b7b87;
+  --accent: #8a6dff;
+  --accent-hover: #9c84ff;
+  --accent-soft: #231c40;
+  --accent-soft-text: #c3b4ff;
+  --success-soft: #10291a;
+  --warning-soft: #2e2211;
+  --danger-soft: #331414;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+  --checker-a: #1c1c22;
+  --checker-b: #26262e;
+  --canvas-dot: #2c2c35;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--text-md);
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Checkerboard behind images so transparency is visible. */
+.checker {
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

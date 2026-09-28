@@ -1,0 +1,22 @@
+name: image-studio
+
+services:
+  app:
+    build: .
+    image: image-studio:latest
+    container_name: image-studio
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4747:4747"
+    environment:
+      STUDIO_HOME: ${HOME}
+      STUDIO_RUNTIME_DIR: ${STUDIO_RUNTIME_DIR}
+      STUDIO_ENGINE_URL: http://host.docker.internal:8199
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Same absolute paths inside and outside, so folders show as real Mac paths
+      # and the engine's input/output folders are shared without translation.
+      - ${HOME}:${HOME}
+      - /Volumes:/Volumes
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
