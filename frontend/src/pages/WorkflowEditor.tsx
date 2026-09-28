@@ -11,6 +11,7 @@ import {
   type Connection,
   type Edge,
   type FinalConnectionState,
+  type FitViewOptions,
   type HandleType,
   type OnConnectEnd,
 } from "@xyflow/react";
@@ -57,7 +58,7 @@ import {
 } from "../flow/graph";
 import { NodePanel } from "../flow/NodePanel";
 import { FlowContext, nodeTypes, type FlowContextValue } from "../flow/nodes";
-import { OutputLightbox } from "../flow/OutputLightbox";
+import { OutputLightbox, useDeletedOutputs } from "../flow/OutputLightbox";
 import { copyWorkflow, exportWorkflowFile, isWorkflowExport } from "../flow/transfer";
 import { useGraph } from "../flow/useGraph";
 import s from "../flow/flow.module.css";
@@ -133,6 +134,9 @@ async function copiedNodes(): Promise<NodeClipboard | null> {
 }
 
 const modalOpen = () => !!document.querySelector('[aria-modal="true"]');
+
+/** Fitting the workflow in view keeps it clear of the floating toolbar at the bottom. */
+const FIT_VIEW: FitViewOptions = { padding: { top: "56px", right: "56px", bottom: "112px", left: "56px" }, maxZoom: 1 };
 
 /** The canvas node under a screen point, if any. */
 function nodeAt(x: number, y: number): string | null {
@@ -215,7 +219,8 @@ function Editor({ workflow }: { workflow: Workflow }) {
   const latest = runs.find((r) => r.workflowId === workflow.id);
   const { run: latestRun } = useRun(latest?.id);
   const active = !!latest && (latest.status === "queued" || latest.status === "running");
-  const states = latestRun?.nodes ?? null;
+  const { hide, onRemoved } = useDeletedOutputs();
+  const states = useMemo(() => hide(latestRun?.nodes ?? null), [hide, latestRun?.nodes]);
 
   const setImageAsset = useCallback((nodeId: string, asset: Asset) => updateData(nodeId, { asset: asset.id }), [updateData]);
   const setNote = useCallback(
@@ -653,12 +658,12 @@ function Editor({ workflow }: { workflow: Workflow }) {
               multiSelectionKeyCode={["Meta", "Control", "Shift"]}
               zoomOnDoubleClick={false}
               fitView
-              fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+              fitViewOptions={FIT_VIEW}
               minZoom={0.2}
               maxZoom={2}
             >
               <Background variant={BackgroundVariant.Dots} gap={22} size={1.6} color="var(--canvas-dot)" />
-              <Controls showInteractive={false} position="bottom-left" />
+              <Controls showInteractive={false} position="bottom-left" fitViewOptions={FIT_VIEW} />
             </ReactFlow>
           </FlowContext.Provider>
           {g.nodes.length === 0 && <div className={s.toolbarHint}>Add a node below — or drop images here</div>}
@@ -705,6 +710,7 @@ function Editor({ workflow }: { workflow: Workflow }) {
         outputs={lightboxOutputs}
         index={lightbox && lightboxOutputs.length ? lightbox.index : null}
         onIndex={(i) => setLightbox(i === null || !lightbox ? null : { ...lightbox, index: i })}
+        onRemoved={onRemoved}
       />
     </div>
   );

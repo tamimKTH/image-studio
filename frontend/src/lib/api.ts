@@ -157,6 +157,8 @@ export interface GenerateNodeData extends GenerateSettings {
 
 export interface RemoveBackgroundNodeData {
   folder: string | null;
+  /** Steps preset for the cut-out; the backend defaults to "standard". */
+  quality?: Quality;
 }
 
 export type NodeData = ImageNodeData | GenerateNodeData | RemoveBackgroundNodeData | NoteNodeData;
@@ -317,8 +319,8 @@ export const api = {
   asset: (id: string) => request<Asset>("GET", `/api/assets/${id}`),
 
   create: (req: CreateRequest) => request<{ runId: string }>("POST", "/api/create", req),
-  removeBackground: (asset: string, folder: string | null) =>
-    request<{ runId: string }>("POST", "/api/remove-background", { asset, folder }),
+  removeBackground: (asset: string, folder: string | null, quality?: Quality) =>
+    request<{ runId: string }>("POST", "/api/remove-background", { asset, folder, quality }),
   enhance: (prompt: string, images: string[], signal?: AbortSignal) =>
     request<EnhanceResult>("POST", "/api/enhance", { prompt, images }, signal),
 

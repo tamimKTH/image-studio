@@ -166,7 +166,7 @@ export function Create() {
     const first = images[0];
     if (!first) return;
     try {
-      const { runId } = await api.removeBackground(first.id, folder);
+      const { runId } = await api.removeBackground(first.id, folder, settings.quality);
       await primeRun(runId);
       toast("Removing the background of image 1");
     } catch (e) {

@@ -64,12 +64,13 @@ export function Workflows() {
     return map;
   }, [runs]);
 
+  /** Adds a workflow from a copy or a file, then opens it — or says so (`how`) and offers to open it. */
   const importData = useCallback(
-    async (data: unknown, open: boolean) => {
+    async (data: unknown, how: "open" | "Pasted" | "Imported") => {
       const wf = await api.importWorkflow(data);
       await refresh();
-      if (open) navigate(`/workflows/${wf.id}`);
-      else toast(`Pasted “${wf.name}”`, { action: { label: "Open", onClick: () => navigate(`/workflows/${wf.id}`) } });
+      if (how === "open") navigate(`/workflows/${wf.id}`);
+      else toast(`${how} “${wf.name}”`, { action: { label: "Open", onClick: () => navigate(`/workflows/${wf.id}`) } });
     },
     [refresh, navigate],
   );
@@ -88,7 +89,7 @@ export function Workflows() {
       }
       if (!isWorkflowExport(data)) return;
       e.preventDefault();
-      importData(data, false).catch((err: Error) => toast(err.message, { tone: "error" }));
+      importData(data, "Pasted").catch((err: Error) => toast(err.message, { tone: "error" }));
     };
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
@@ -157,7 +158,7 @@ export function Workflows() {
       e.preventDefault();
       if (!file) return toast("Drop a workflow file (.studio.json) here", { tone: "error" });
       try {
-        await importData(await readWorkflowFile(file), false);
+        await importData(await readWorkflowFile(file), "Imported");
       } catch (err) {
         toast((err as Error).message, { tone: "error" });
       }
@@ -273,7 +274,7 @@ export function Workflows() {
         </div>
       </Modal>
 
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImport={(data) => importData(data, true)} />
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImport={(data) => importData(data, "open")} />
       <RenameModal
         workflow={renaming}
         onClose={() => setRenaming(null)}

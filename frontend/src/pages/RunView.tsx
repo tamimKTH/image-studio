@@ -7,10 +7,11 @@ import { useRun } from "../lib/events";
 import { duration, plural } from "../lib/format";
 import { useResolvedTheme } from "../lib/prefs";
 import { stepLabel } from "../components/media/ImageCard";
+import { runAgain as startAgain, runAgainLabel } from "../components/media/RunResults";
 import { Button, Empty, IconButton, Spinner, cx, toast } from "../components/ui";
 import { runProgress, toFlowEdges, toFlowNodes, topoOrder } from "../flow/graph";
 import { FlowContext, nodeTypes, type FlowContextValue } from "../flow/nodes";
-import { OutputLightbox } from "../flow/OutputLightbox";
+import { OutputLightbox, useDeletedOutputs } from "../flow/OutputLightbox";
 import { CreateRunView } from "./CreateRun";
 import s from "../flow/flow.module.css";
 
@@ -75,6 +76,8 @@ function WorkflowRun({ run }: { run: RunDetail }) {
   const theme = useResolvedTheme();
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState<{ outputs: OutputImage[]; index: number } | null>(null);
+  const { hide, onRemoved } = useDeletedOutputs();
+  const states = useMemo(() => hide(run.nodes) ?? {}, [hide, run.nodes]);
 
   const nodes = useMemo(() => toFlowNodes(run.graph.nodes), [run.graph]);
   const edges = useMemo<Edge[]>(() => {
@@ -97,22 +100,22 @@ function WorkflowRun({ run }: { run: RunDetail }) {
 
   // All results, inputs before the images made from them.
   const outputs = useMemo(
-    () => topoOrder(run.graph).flatMap((nid) => (run.graph.nodes.find((n) => n.id === nid)?.type === "image" ? [] : run.nodes[nid]?.outputs ?? [])),
-    [run.graph, run.nodes],
+    () => topoOrder(run.graph).flatMap((nid) => (run.graph.nodes.find((n) => n.id === nid)?.type === "image" ? [] : states[nid]?.outputs ?? [])),
+    [run.graph, states],
   );
 
   const ctx = useMemo<FlowContextValue>(
     () => ({
       readOnly: true,
       runId: run.id,
-      states: run.nodes,
+      states,
       showAllStates: true,
       onOpenOutputs: (nodeId) => {
-        const list = run.nodes[nodeId]?.outputs ?? [];
+        const list = states[nodeId]?.outputs ?? [];
         if (list.length) setLightbox({ outputs: list, index: 0 });
       },
     }),
-    [run.id, run.nodes],
+    [run.id, states],
   );
 
   async function cancel() {
@@ -127,10 +130,11 @@ function WorkflowRun({ run }: { run: RunDetail }) {
     }
   }
 
+  // A finished run starts over; a failed or canceled one resumes, keeping the images it made.
   async function runAgain() {
     setBusy(true);
     try {
-      const { runId } = await api.retryRun(run.id);
+      const runId = await startAgain(run);
       navigate(`/runs/${runId}`);
     } catch (e) {
       toast((e as Error).message, { tone: "error" });
@@ -179,8 +183,8 @@ function WorkflowRun({ run }: { run: RunDetail }) {
             Cancel
           </Button>
         ) : (
-          <Button variant="primary" icon={<RotateCcw size={15} />} onClick={runAgain} loading={busy}>
-            Run again
+          <Button variant="primary" icon={<RotateCcw size={15} />} onClick={runAgain} loading={busy} title={runAgainLabel(run).title}>
+            {runAgainLabel(run).label}
           </Button>
         )}
       </header>
@@ -216,7 +220,8 @@ function WorkflowRun({ run }: { run: RunDetail }) {
         <span className={s.stripLabel}>{outputs.length ? plural(outputs.length, "result") : active ? "Results appear here" : "No results"}</span>
         {outputs.map((o, i) => (
           <button key={o.id} type="button" className={cx(s.stripItem, "checker")} onClick={() => setLightbox({ outputs, index: i })} title={o.name}>
-            <img src={o.thumb} alt={o.name} />
+            {/* A result moved or deleted outside this page leaves the list. */}
+            <img src={o.thumb} alt={o.name} onError={() => onRemoved(o.path, true)} />
           </button>
         ))}
       </div>
@@ -225,6 +230,7 @@ function WorkflowRun({ run }: { run: RunDetail }) {
         outputs={lightbox?.outputs ?? []}
         index={lightbox ? lightbox.index : null}
         onIndex={(i) => setLightbox(i === null || !lightbox ? null : { ...lightbox, index: i })}
+        onRemoved={onRemoved}
       />
     </div>
   );

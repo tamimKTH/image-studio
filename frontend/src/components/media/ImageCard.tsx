@@ -71,7 +71,7 @@ export function ImageCard({ src, preview, state, step = 0, steps = 0, error, rat
  * "Step 12 of 28" while sampling, "Finishing…" once every step is done (decoding and saving).
  */
 export function stepLabel(step: number, steps: number): string {
-  if (!steps) return "Preparing…";
+  if (!steps || step <= 0) return "Preparing…";
   if (step >= steps) return "Finishing…";
   return `Step ${step} of ${steps}`;
 }

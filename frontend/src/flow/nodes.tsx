@@ -135,7 +135,9 @@ function StatusBadge({ state, all }: { state?: NodeState; all: boolean }) {
  */
 function Result({ id, state, preview, emptyHint }: { id: string; state?: NodeState; preview?: string; emptyHint: ReactNode }) {
   const { ctx } = useNodeRun(id);
-  const outputs = state?.outputs ?? [];
+  // The thumbnail of a result that was moved or deleted outside the app no longer loads.
+  const [missing, setMissing] = useState<string | null>(null);
+  const outputs = (state?.outputs ?? []).filter((o) => o.thumb !== missing);
   if (state?.status === "running")
     return (
       <div className={cx(s.result, "checker")}>
@@ -160,7 +162,7 @@ function Result({ id, state, preview, emptyHint }: { id: string; state?: NodeSta
   if (outputs.length)
     return (
       <button type="button" className={cx(s.result, s.resultButton, "checker", "nodrag")} onClick={() => ctx.onOpenOutputs?.(id)} title="Open result">
-        <img src={outputs[0].thumb} alt="Result" />
+        <img src={outputs[0].thumb} alt="Result" onError={() => setMissing(outputs[0].thumb)} />
         {outputs.length > 1 && <span className={s.morePill}>+{outputs.length - 1}</span>}
       </button>
     );
@@ -173,7 +175,9 @@ function Result({ id, state, preview, emptyHint }: { id: string; state?: NodeSta
           ? "In queue"
           : state?.status === "waiting"
             ? "Waiting for inputs"
-            : emptyHint;
+            : state?.status === "done"
+              ? "The result was moved or deleted"
+              : emptyHint;
   return (
     <div className={cx(s.result, s.resultEmpty)}>
       {(state?.status === "queued" || state?.status === "waiting") && <Clock size={15} />}

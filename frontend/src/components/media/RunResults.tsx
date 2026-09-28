@@ -9,6 +9,7 @@ import {
   type NodeState,
   type NodeStatus,
   type OutputImage,
+  type RemoveBackgroundNodeData,
   type RunDetail,
   type RunStatus,
   type RunSummary,
@@ -228,7 +229,10 @@ export async function runAgain(run: RunSummary): Promise<string> {
   if (run.kind === "workflow" && run.workflowId) return (await api.runWorkflow(run.workflowId)).runId;
   const detail = await api.run(run.id);
   const images = runInputs(detail).map((o) => o.id);
-  if (workNodeId(detail) === "cut") return (await api.removeBackground(images[0], detail.folder)).runId;
+  if (workNodeId(detail) === "cut") {
+    const cut = detail.graph.nodes.find((n) => n.id === "cut")?.data as RemoveBackgroundNodeData | undefined;
+    return (await api.removeBackground(images[0], detail.folder, cut?.quality)).runId;
+  }
   const g = generateData(detail);
   if (!g) return (await api.retryRun(run.id)).runId;
   const { runId } = await api.create({
