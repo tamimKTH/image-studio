@@ -21,7 +21,7 @@ def _edge(source: str, target: str) -> dict:
 STARTERS = {
     "blank": ("Untitled workflow", lambda: {"nodes": [], "edges": []}),
     "combine": ("Combine two images", lambda: {
-        "nodes": [_image("i1", 0, -120), _image("i2", 0, 120),
+        "nodes": [_image("i1", 0, -170), _image("i2", 0, 170),
                   {"id": "g1", "type": "generate", "position": {"x": STEP, "y": 0},
                    "data": generate_data("Put image 2 into image 1, matching the lighting", ["i1", "i2"])}],
         "edges": [_edge("i1", "g1"), _edge("i2", "g1")]}),

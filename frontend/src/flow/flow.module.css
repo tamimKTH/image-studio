@@ -317,10 +317,21 @@
   overflow: hidden;
   border: 1px solid var(--border);
 }
+/* Absolute, so the picture fits the box instead of setting the grid row's height (which cropped it). */
 .imageBox img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.imageOpen {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
 }
 .dropOver {
   box-shadow: inset 0 0 0 2px var(--accent);
@@ -415,6 +426,8 @@
   border: 1px solid var(--border);
 }
 .result img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;

@@ -7,6 +7,7 @@ import type { Asset, NodeState, NoteColor } from "../lib/api";
 import { usePreview } from "../lib/events";
 import { uploadImages } from "../components/composer/ImageStrip";
 import { stepLabel } from "../components/media/ImageCard";
+import { Lightbox } from "../components/media/Lightbox";
 import { ProgressRing, Spinner, cx, toast } from "../components/ui";
 import { rememberAsset, useAsset } from "./assets";
 import { NOTE_COLORS, nodeTitle, type GenerateFlowNode, type ImageFlowNode, type NoteFlowNode, type RemoveBgFlowNode } from "./graph";
@@ -60,15 +61,17 @@ interface CardProps {
   input?: boolean;
   output?: boolean;
   state?: NodeState;
+  /** Card width in pixels; cards without one keep the standard width. */
+  width?: number;
   children: ReactNode;
 }
 
-function NodeCard({ id, type, selected, icon, input, output, state, children }: CardProps) {
+function NodeCard({ id, type, selected, icon, input, output, state, width, children }: CardProps) {
   const { ctx } = useNodeRun(id);
   const nodes = useNodes();
   const title = nodeTitle({ id, type }, nodes);
   return (
-    <div className={cx(s.node, selected && s.selected, statusClass(state, ctx.showAllStates))} data-type={type}>
+    <div className={cx(s.node, selected && s.selected, statusClass(state, ctx.showAllStates))} data-type={type} style={width ? { width } : undefined}>
       <div className={s.nodeHeader}>
         <span className={cx(s.nodeIcon, s[`icon_${type}`])}>{icon}</span>
         <span className={s.nodeTitle}>{title}</span>
@@ -187,13 +190,30 @@ function Result({ id, state, preview, emptyHint }: { id: string; state?: NodeSta
 }
 
 // ---------- Image ----------
+const IMAGE_AREA = 40_000;
+const IMAGE_WIDTH = { min: 176, max: 280 };
+const IMAGE_HEIGHT = { min: 120, max: 240 };
+/** Horizontal space around the picture inside the card (its side margins). */
+const IMAGE_INSET = 24;
+
+/** The picture's box on the card: about the same area for every image, in the image's own proportions. */
+function imageBoxSize(width: number, height: number): { width: number; height: number } | null {
+  if (!width || !height) return null;
+  const ratio = width / height;
+  const boxWidth = Math.round(Math.min(IMAGE_WIDTH.max, Math.max(IMAGE_WIDTH.min, Math.sqrt(IMAGE_AREA * ratio))));
+  const boxHeight = Math.round(Math.min(IMAGE_HEIGHT.max, Math.max(IMAGE_HEIGHT.min, boxWidth / ratio)));
+  return { width: boxWidth, height: boxHeight };
+}
+
 export const ImageNode = memo(function ImageNode({ id, data, selected }: NodeProps<ImageFlowNode>) {
   const { ctx, state } = useNodeRun(id);
   const asset = useAsset(data.asset);
   const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const editable = !ctx.readOnly && !!ctx.onImageAsset;
+  const box = asset ? imageBoxSize(asset.width, asset.height) : null;
 
   async function accept(files: FileList | File[]) {
     setBusy(true);
@@ -230,14 +250,22 @@ export const ImageNode = memo(function ImageNode({ id, data, selected }: NodePro
     : {};
 
   return (
-    <NodeCard id={id} type="image" selected={selected} icon={<ImagePlus size={15} />} output state={state}>
-      <div className={cx(s.imageBox, "checker", over && s.dropOver)} {...dropProps}>
+    <NodeCard id={id} type="image" selected={selected} icon={<ImagePlus size={15} />} output state={state} width={box ? box.width + IMAGE_INSET : undefined}>
+      <div className={cx(s.imageBox, "checker", over && s.dropOver)} style={box ?? undefined} {...dropProps}>
         {busy ? (
           <div className={s.resultHint}>
             <Spinner /> Uploading…
           </div>
         ) : asset ? (
-          <img src={asset.thumb} alt={asset.name} draggable={false} />
+          <button
+            type="button"
+            className={cx(s.imageOpen, "nodrag")}
+            // The run view opens a node's outputs (for an Image node, its picture) in its own lightbox.
+            onClick={() => (ctx.readOnly && ctx.onOpenOutputs ? ctx.onOpenOutputs(id) : setViewing(true))}
+            title="View full image"
+          >
+            <img src={asset.thumb} alt={asset.name} draggable={false} />
+          </button>
         ) : data.asset ? (
           <div className={s.resultHint}>
             <Spinner />
@@ -270,6 +298,13 @@ export const ImageNode = memo(function ImageNode({ id, data, selected }: NodePro
           e.target.value = "";
         }}
       />
+      {asset && viewing && (
+        <Lightbox
+          items={[{ url: asset.url, path: asset.path, name: asset.name }]}
+          index={0}
+          onIndex={(index) => setViewing(index !== null)}
+        />
+      )}
     </NodeCard>
   );
 });
