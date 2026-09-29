@@ -48,6 +48,7 @@ import {
   connectionToCard,
   freeSpot,
   fromFlow,
+  imageCardSize,
   isNodeClipboard,
   nodeHeight,
   nodeSize,
@@ -392,10 +393,19 @@ function Editor({ workflow }: { workflow: Workflow }) {
       const c = viewCenter();
       let p = at ?? { x: c.x - NODE_WIDTH / 2, y: c.y - nodeHeight("image") / 2 };
       const ids: string[] = [];
+      // Cards added in this loop aren't measured yet, so give them the size their picture will have.
+      const sizes = new Map<string, { width: number; height: number }>();
       for (const a of assets) {
         rememberAsset(a);
-        p = freeSpot(p, "image", nodesRef.current);
-        ids.push(addNode("image", p, { data: { asset: a.id } }));
+        const size = imageCardSize(a.width, a.height);
+        const known = nodesRef.current.map((n) => {
+          const measured = sizes.get(n.id);
+          return measured ? { ...n, measured } : n;
+        });
+        p = freeSpot(p, size, known);
+        const id = addNode("image", p, { data: { asset: a.id } });
+        sizes.set(id, size);
+        ids.push(id);
       }
       toast(`Added ${plural(ids.length, "image")}`);
       reveal(ids, true);
@@ -768,6 +778,7 @@ function Editor({ workflow }: { workflow: Workflow }) {
               onNodeDragStart={g.onNodeDragStart}
               onPaneClick={() => setDropMenu(null)}
               deleteKeyCode={["Backspace", "Delete"]}
+              onBeforeDelete={async () => !modalOpen()}
               selectionOnDrag
               selectionMode={SelectionMode.Partial}
               panOnDrag={[1, 2]}

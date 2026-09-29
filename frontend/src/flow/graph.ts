@@ -26,8 +26,30 @@ export type FlowNode = ImageFlowNode | GenerateFlowNode | RemoveBgFlowNode | Not
 
 export const MAX_INPUTS = 10;
 export const NODE_WIDTH = 248;
-/** Card heights before React Flow has measured them (cards have fixed-size image areas, so they don't grow). */
+/** Card heights before React Flow has measured them. An Image card with a picture follows `imageCardSize` instead. */
 const NODE_HEIGHT: Record<NodeType, number> = { image: 236, generate: 292, removeBackground: 214, note: 160 };
+
+/** An Image card's picture box when it has no picture yet; the card adds IMAGE_CHROME around the box. */
+const IMAGE_BOX = { width: 224, height: 156 };
+export const IMAGE_CHROME = { width: NODE_WIDTH - IMAGE_BOX.width, height: NODE_HEIGHT.image - IMAGE_BOX.height };
+const IMAGE_AREA = 40_000;
+const IMAGE_WIDTH = { min: 176, max: 280 };
+const IMAGE_HEIGHT = { min: 120, max: 240 };
+
+/** The picture's box on an Image card: about the same area for every image, in the image's own proportions. */
+export function imageBoxSize(width: number, height: number): { width: number; height: number } | null {
+  if (!width || !height) return null;
+  const ratio = width / height;
+  const boxWidth = Math.round(Math.min(IMAGE_WIDTH.max, Math.max(IMAGE_WIDTH.min, Math.sqrt(IMAGE_AREA * ratio))));
+  const boxHeight = Math.round(Math.min(IMAGE_HEIGHT.max, Math.max(IMAGE_HEIGHT.min, boxWidth / ratio)));
+  return { width: boxWidth, height: boxHeight };
+}
+
+/** The whole Image card for a picture of this size, before React Flow has measured it. */
+export function imageCardSize(width: number, height: number): { width: number; height: number } {
+  const box = imageBoxSize(width, height) ?? IMAGE_BOX;
+  return { width: box.width + IMAGE_CHROME.width, height: box.height + IMAGE_CHROME.height };
+}
 export const NOTE_SIZE = { width: 240, height: 160 };
 export const NOTE_COLORS: NoteColor[] = ["yellow", "blue", "green", "pink", "gray"];
 

@@ -10,7 +10,7 @@ import { stepLabel } from "../components/media/ImageCard";
 import { Lightbox } from "../components/media/Lightbox";
 import { ProgressRing, Spinner, cx, toast } from "../components/ui";
 import { rememberAsset, useAsset } from "./assets";
-import { NOTE_COLORS, nodeTitle, type GenerateFlowNode, type ImageFlowNode, type NoteFlowNode, type RemoveBgFlowNode } from "./graph";
+import { IMAGE_CHROME, NOTE_COLORS, imageBoxSize, nodeTitle, type GenerateFlowNode, type ImageFlowNode, type NoteFlowNode, type RemoveBgFlowNode } from "./graph";
 import s from "./flow.module.css";
 
 export interface FlowContextValue {
@@ -190,21 +190,6 @@ function Result({ id, state, preview, emptyHint }: { id: string; state?: NodeSta
 }
 
 // ---------- Image ----------
-const IMAGE_AREA = 40_000;
-const IMAGE_WIDTH = { min: 176, max: 280 };
-const IMAGE_HEIGHT = { min: 120, max: 240 };
-/** Horizontal space around the picture inside the card (its side margins). */
-const IMAGE_INSET = 24;
-
-/** The picture's box on the card: about the same area for every image, in the image's own proportions. */
-function imageBoxSize(width: number, height: number): { width: number; height: number } | null {
-  if (!width || !height) return null;
-  const ratio = width / height;
-  const boxWidth = Math.round(Math.min(IMAGE_WIDTH.max, Math.max(IMAGE_WIDTH.min, Math.sqrt(IMAGE_AREA * ratio))));
-  const boxHeight = Math.round(Math.min(IMAGE_HEIGHT.max, Math.max(IMAGE_HEIGHT.min, boxWidth / ratio)));
-  return { width: boxWidth, height: boxHeight };
-}
-
 export const ImageNode = memo(function ImageNode({ id, data, selected }: NodeProps<ImageFlowNode>) {
   const { ctx, state } = useNodeRun(id);
   const asset = useAsset(data.asset);
@@ -250,7 +235,7 @@ export const ImageNode = memo(function ImageNode({ id, data, selected }: NodePro
     : {};
 
   return (
-    <NodeCard id={id} type="image" selected={selected} icon={<ImagePlus size={15} />} output state={state} width={box ? box.width + IMAGE_INSET : undefined}>
+    <NodeCard id={id} type="image" selected={selected} icon={<ImagePlus size={15} />} output state={state} width={box ? box.width + IMAGE_CHROME.width : undefined}>
       <div className={cx(s.imageBox, "checker", over && s.dropOver)} style={box ?? undefined} {...dropProps}>
         {busy ? (
           <div className={s.resultHint}>
@@ -260,8 +245,11 @@ export const ImageNode = memo(function ImageNode({ id, data, selected }: NodePro
           <button
             type="button"
             className={cx(s.imageOpen, "nodrag")}
-            // The run view opens a node's outputs (for an Image node, its picture) in its own lightbox.
-            onClick={() => (ctx.readOnly && ctx.onOpenOutputs ? ctx.onOpenOutputs(id) : setViewing(true))}
+            onClick={(e) => {
+              // Focus leaves the card, so arrow keys and Delete can't move or remove it behind the lightbox.
+              e.currentTarget.blur();
+              setViewing(true);
+            }}
             title="View full image"
           >
             <img src={asset.thumb} alt={asset.name} draggable={false} />

@@ -204,7 +204,7 @@ function WorkflowRun({ run }: { run: RunDetail }) {
               nodesConnectable={false}
               elementsSelectable={false}
               deleteKeyCode={null}
-              onNodeClick={(_, node) => ctx.onOpenOutputs?.(node.id)}
+              onNodeClick={(_, node) => node.type !== "image" && ctx.onOpenOutputs?.(node.id)}
               fitView
               fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
               minZoom={0.2}

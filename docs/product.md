@@ -42,7 +42,7 @@ The row under the prompt holds the options you change most:
 | Aspect ratio | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, and **Match image 1** when images are attached |
 | Size | **1K** (about 1 megapixel) or **2K** (2048 × 2048 at 1:1) |
 | Variations | ×1 to ×4 |
-| **Transparent** | Makes a PNG with a transparent background. It turns on by itself when image 1 is transparent. |
+| **Transparent** | Makes a PNG with a transparent background. It turns on by itself when image 1 is transparent, and off again when image 1 stops being transparent. |
 
 The sliders button opens **More settings**:
 

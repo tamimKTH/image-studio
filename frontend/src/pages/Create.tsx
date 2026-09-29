@@ -96,12 +96,12 @@ export function Create() {
   // An edit follows image 1 unless an aspect is picked: attaching the first image switches to "Match image 1".
   const matchFirstImage = useCallback(() => setSettings((st) => (st.aspect === "auto" ? st : { ...st, aspect: "auto" })), []);
 
-  // Transparent follows image 1 when it changes: the result only keeps alpha when Transparent is on.
+  // Transparent follows image 1 when its transparency changes (on for a transparent image 1, off when it goes).
+  // Only a Transparent result keeps alpha, and a manual choice stays until image 1's transparency changes.
   const changeImages = useCallback((next: Asset[]) => {
-    const first = next[0];
-    if (first && first.id !== imagesRef.current[0]?.id) {
-      setSettings((st) => (st.transparent === first.hasAlpha ? st : { ...st, transparent: first.hasAlpha }));
-    }
+    const before = imagesRef.current[0]?.hasAlpha ?? false;
+    const after = next[0]?.hasAlpha ?? false;
+    if (before !== after) setSettings((st) => ({ ...st, transparent: after }));
     setImages(next);
   }, []);
 
