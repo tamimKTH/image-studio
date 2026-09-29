@@ -94,4 +94,13 @@ Comfy Desktop has the same VAE problem: its edits look grey unless it is started
 
 - Source: `backend/` (FastAPI), `frontend/` (React + Vite + React Flow), `engine/` (install and conversion scripts), `studio` (CLI).
 - Design and decisions: `docs/changes/2026-09-28-image-studio/` (intent, spec, plan).
-- Licence of the model and enhancers: Qwen Research License (non-commercial research).
+
+## Licence
+
+Copyright (C) 2026 Majed Tamim
+
+The code in this repository is free software under the **GNU Affero General Public License v3.0 or later** (AGPL-3.0-or-later). The full text is in [`LICENSE`](LICENSE).
+
+Anyone may use, change and share it. If you distribute a changed version, or run one that other people use over a network, you must publish its full source under the same licence.
+
+**The models are not covered by this licence.** The model weights and prompt enhancers are not part of this repository. They stay under the Qwen Research License (non-commercial research), and this licence gives no right to use them commercially.
