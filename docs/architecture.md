@@ -184,4 +184,4 @@ Image Studio has no login. It is meant for one person on one Mac, so it protects
 
 ## Design history
 
-The original intent, specification and build plan live in [`docs/changes/2026-09-28-image-studio/`](changes/2026-09-28-image-studio/). They record the decisions above as they were made, including the measurements behind the two GPU workarounds.
+The original intent, specification and build plan live in [`docs/changes/2026-09-28-image-studio/`](changes/2026-09-28-image-studio/). They record the decisions above as they were made, including the measurements behind the two GPU workarounds. Some details have changed since. For example, the spec says transparent inputs always keep their alpha, and now only a Transparent result keeps it, as described above.
