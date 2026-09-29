@@ -96,16 +96,25 @@ export function Create() {
   // An edit follows image 1 unless an aspect is picked: attaching the first image switches to "Match image 1".
   const matchFirstImage = useCallback(() => setSettings((st) => (st.aspect === "auto" ? st : { ...st, aspect: "auto" })), []);
 
+  // Transparent follows image 1 when it changes: the result only keeps alpha when Transparent is on.
+  const changeImages = useCallback((next: Asset[]) => {
+    const first = next[0];
+    if (first && first.id !== imagesRef.current[0]?.id) {
+      setSettings((st) => (st.transparent === first.hasAlpha ? st : { ...st, transparent: first.hasAlpha }));
+    }
+    setImages(next);
+  }, []);
+
   // Images (and a prompt) handed over from Library, Activity or a run.
   const handoffSeq = useHandoff((st) => st.seq);
   useEffect(() => {
     const handed = takeHandoff();
     if (handed.images.length) {
       if (!imagesRef.current.length) matchFirstImage();
-      setImages(handed.images.slice(0, MAX_IMAGES));
+      changeImages(handed.images.slice(0, MAX_IMAGES));
     }
     if (handed.prompt) setPrompt(handed.prompt);
-  }, [handoffSeq, matchFirstImage]);
+  }, [handoffSeq, matchFirstImage, changeImages]);
 
   const addImages = useCallback(
     (assets: Asset[]) => {
@@ -113,9 +122,9 @@ export function Create() {
       if (!imagesRef.current.length) matchFirstImage();
       const next = [...imagesRef.current, ...assets];
       if (next.length > MAX_IMAGES) toast(`Up to ${MAX_IMAGES} images — the rest were left out`);
-      setImages(next.slice(0, MAX_IMAGES));
+      changeImages(next.slice(0, MAX_IMAGES));
     },
-    [matchFirstImage],
+    [matchFirstImage, changeImages],
   );
   const drop = useImageDrop(addImages);
 
@@ -275,7 +284,7 @@ export function Create() {
 
         <div className={s.composer}>
           {(hasImages || drop.busy) && (
-            <ImageStrip assets={images} onChange={setImages} uploading={drop.busy} onAddFiles={(files) => drop.accept(files)} />
+            <ImageStrip assets={images} onChange={changeImages} uploading={drop.busy} onAddFiles={(files) => drop.accept(files)} />
           )}
           <PromptBox
             value={prompt}

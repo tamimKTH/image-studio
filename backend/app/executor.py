@@ -360,7 +360,10 @@ class Executor:
         data = node.get("data") or {}
         inputs = self._input_assets(run_id, node, edges)
         folder = save_folder(data.get("folder") or run["folder"])
-        prepared = [await asyncio.to_thread(files.prepare_input, Path(a["path"])) for a in inputs]
+        # Only a transparent result keeps alpha. Otherwise inputs are flattened onto white first: a transparent
+        # image 1 is the canvas, and the model would leave its empty areas see-through.
+        keep_alpha = node["type"] == "removeBackground" or bool(data.get("transparent"))
+        prepared = [await asyncio.to_thread(files.prepare_input, Path(a["path"]), not keep_alpha) for a in inputs]
         engine_inputs = [p[0] for p in prepared]
         jobs: list[Job] = []
         try:
@@ -406,7 +409,6 @@ class Executor:
             meta_base = {"kind": node["type"], "prompt": user_prompt, "negative": negative, "steps": sampling.steps,
                          "cfg": sampling.cfg, "sampler": sampling.sampler, "scheduler": sampling.scheduler,
                          "transparent": transparent, "inputs": [asset_json(a)["name"] for a in inputs], "model": config.MODEL_LABEL}
-            keep_alpha = transparent or any(i.has_alpha for i in engine_inputs)
             errors, saved = [], 0
             for finished in asyncio.as_completed([j.future for j in jobs]):
                 job: Job = await finished
@@ -484,7 +486,7 @@ class Executor:
         else:
             filename = f"{slug(meta['prompt'])}-{time.strftime('%Y%m%d-%H%M%S')}-{job.seed}.png"
         target, width, height, alpha = await asyncio.to_thread(
-            files.save_result, src, folder, filename, meta, keep_alpha or node["type"] == "removeBackground")
+            files.save_result, src, folder, filename, meta, keep_alpha)
         for image in images:
             (config.ENGINE_OUTPUT_DIR / image.get("subfolder", "") / image["filename"]).unlink(missing_ok=True)
         asset = db.insert_asset(str(target), "generated", width, height, alpha, {**meta, "width": width, "height": height})
