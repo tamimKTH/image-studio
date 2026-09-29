@@ -152,7 +152,7 @@ function GenerateSettingsPanel({ node, nodes, edges, states, onChange, onRun, ..
       <div className={s.switchRow}>
         <div>
           <div className={s.switchText}>Auto-improve</div>
-          <div className={s.switchHint}>Improve the prompt with the input images when the run starts (about 30 s more).</div>
+          <div className={s.switchHint}>Improve the prompt with the input images when this step starts. It adds about a minute.</div>
         </div>
         <Switch checked={data.autoImprove} onChange={(autoImprove) => set({ autoImprove })} label="Auto-improve" />
       </div>
