@@ -33,7 +33,7 @@ curl -s "http://127.0.0.1:4747/api/runs/$run" \
 | `GET` | `/api/status` | | `engine` (online, device, queue, version, error), `models` (which model files are present), `defaultFolder` |
 | `GET` | `/api/settings` | | `{"defaultFolder": "..."}` |
 | `PUT` | `/api/settings` | `{"defaultFolder": "/path"}` | The new setting. The folder is also added to the saved folders. |
-| `GET` | `/api/options` | | The sampler and scheduler names the engine offers, or a built-in list while the engine is offline |
+| `GET` | `/api/options` | | The sampler and scheduler names the engine offers, or a built-in list if the engine hasn't answered since the server started |
 
 ## Generation
 
@@ -61,8 +61,8 @@ curl -s "http://127.0.0.1:4747/api/runs/$run" \
 | `advanced.negative` | string | `""` | What to avoid |
 | `advanced.cfg` | 1 to 20, or `null` | `null` | Guidance. `null` means 1, or 4 when `negative` is set. |
 | `advanced.steps` | 1 to 100, or `null` | `null` | Overrides `quality` |
-| `advanced.sampler` | string | `euler` | One of the names from `/api/options`. An unknown name falls back to `euler`. |
-| `advanced.scheduler` | string | `simple` | One of the names from `/api/options`. An unknown name falls back to `simple`. |
+| `advanced.sampler` | string | `euler` | One of the names from `/api/options`. An unknown name falls back to `euler`, and so does every name if the engine hasn't answered since the server started. |
+| `advanced.scheduler` | string | `simple` | One of the names from `/api/options`. An unknown name falls back to `simple`, with the same exception. |
 | `advanced.refDetail` | `standard`, `high`, `original` | `standard` | How much detail of the input images the model reads |
 
 ## Runs

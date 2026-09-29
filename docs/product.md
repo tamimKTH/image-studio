@@ -103,7 +103,7 @@ The toolbar at the bottom of the canvas adds nodes:
 Click a node to open its settings on the right. A Generate node has the same prompt box and options as Create, plus:
 
 - the order of its inputs, which you can drag to change,
-- **Auto-improve**, which runs Improve with the node's real input images when the run starts, and
+- **Auto-improve**, which runs Improve with the node's actual input images when the node starts, after the steps before it finish, and
 - **Save to**, a folder for this node's results.
 
 ![The settings panel of Generate 1: its prompt, its two input images in order, options, Auto-improve and Save to](images/node-panel.webp)
@@ -142,7 +142,7 @@ Activity lists every run from Create and from workflows, with the running ones a
 - **Cancel** stops a run.
 - **Retry** starts a failed or canceled run again and reuses the steps that finished.
 - **Run again** makes a finished run's images again from scratch, with the same graph and settings, even if you edited the workflow since.
-- Activity loads the newest 60 runs when it opens.
+- Activity starts with the newest 60 runs, and new runs join the list as they start.
 
 ## Library
 

@@ -39,8 +39,6 @@ Two settings in the engine work around problems measured on the Apple GPU on 202
 - **The VAE runs on the CPU (`--cpu-vae`).** VAE encoding on the Apple GPU corrupts images. An encode and decode round trip had a mean error of 54/255 on the GPU, against 1.8 on the CPU, and edits came out grey and embossed.
 - **The text encoders are bf16 copies.** The official text encoders are int8 and need `aten::_int_mm`, which PyTorch lacks on the Apple GPU. On the CPU the 9B prompt enhancer managed about 0.4 tokens/s. `./studio setup` converts them once with `engine/dequantize.py`, and on the GPU the enhancer runs at about 11 tokens/s.
 
-Comfy Desktop has the same VAE problem on the same Mac. Its edits look grey unless it starts with `--cpu-vae`.
-
 The engine also runs with `--gpu-only`, which keeps the text encoders on the GPU. That made edits about 35% faster.
 
 ## The same paths inside and outside the container
@@ -87,7 +85,7 @@ Details that matter when you read the code:
 - **Prompts are rewritten before they reach the model.** "image 2", "img 2" and "picture 2" become `<image2>` when that input exists. A Transparent request wraps the prompt in the model's official RGBA wording.
 - **Remove background uses the same image model** with the prompt "Remove the background, and output a PNG image". It needs no extra model.
 - **If the engine is offline,** jobs wait and try again every 3 seconds. After a restart of the API server, runs that were queued or running end with "Interrupted by an app restart".
-- **After 10 idle minutes** the executor asks the engine to unload its models (`POST /free`), which frees the memory they use. On an M5 Max the engine went from 38 GB to 1.3 GB. `STUDIO_IDLE_MINUTES` changes the delay, and `0` turns it off.
+- **After 10 idle minutes** the executor asks the engine to unload its models (`POST /free`), which frees the memory they use. On an M5 Max the engine went from 38 GB to 1.3 GB. A server you run yourself reads the delay from `STUDIO_IDLE_MINUTES`, where `0` turns it off. Docker Compose doesn't pass that variable, so the app in Docker always uses 10 minutes.
 
 ### Run and node states
 
@@ -159,7 +157,7 @@ Image Studio has no login. It is meant for one person on one Mac, so it protects
 - **Local only.** Docker publishes port 4747 on `127.0.0.1` only, and the engine listens on `127.0.0.1:8199`.
 - **No DNS rebinding.** The server answers only requests whose `Host` is `127.0.0.1`, `localhost` or `::1`.
 - **No cross-site changes.** A request that changes data is refused when its `Origin` names another site. Other sites also can't read `/api` from their pages, and the app can't be shown inside another site's frame.
-- **Limited file access.** The file routes read and write only inside your home folder and `/Volumes`. They refuse `~/Library` (in any letter case) and hidden folders. The app's own runtime folder is the one exception. The folder browser also hides macOS packages such as `.app` and `.photoslibrary`.
+- **Limited file access.** The file routes read and write only inside your home folder and `/Volumes`. They refuse `~/Library` (in any letter case) and hidden folders. The app's own runtime folder can be read but never used as a save folder. The folder browser also hides macOS packages such as `.app` and `.photoslibrary`.
 
 ## Code map
 
