@@ -6,7 +6,7 @@ This guide installs Image Studio on a Mac, from a fresh clone to the first image
 
 | | Requirement |
 |---|---|
-| **Mac** | Apple silicon (M1 or later). Setup stops if PyTorch can't use the Apple GPU (MPS). |
+| **Mac** | Apple silicon. Setup stops if PyTorch can't use the Apple GPU (MPS). Built and tested on an M5 Max. |
 | **Memory** | 64 GB or more is a sensible minimum. The engine used 38 GB while generating on an M5 Max with 128 GB, and the prompt enhancer loads another 19 GB of weights. |
 | **Disk** | About 95 GB for the models, plus 1.5 GB for the engine. |
 | **Software** | [Docker Desktop](https://www.docker.com/products/docker-desktop/), [uv](https://docs.astral.sh/uv/) (`brew install uv`), and `git`. `uv` installs the engine's Python 3.13 by itself. |
@@ -20,7 +20,7 @@ cd image-studio
 
 ## 2. Download the models
 
-Image Studio reads its models from `~/ComfyUI-Shared/models`. If you use Comfy Desktop, it can share that folder.
+Image Studio reads its models from `~/ComfyUI-Shared/models`.
 
 | File | Folder | Size | Source |
 |---|---|---|---|
@@ -69,7 +69,7 @@ Start Docker Desktop, then run:
 
 When it finishes, it prints `Image Studio is running: http://127.0.0.1:4747`. Open that address.
 
-After setup, the three int8 files are no longer needed. You can delete them to free 28 GB. `setup` converts them again only if a bf16 copy is missing.
+After setup, the three int8 files are no longer needed, and you can delete them to free 28 GB. Keep the bf16 copies. `setup` can make a missing copy again only while its int8 file is still there.
 
 ## 4. Make your first image
 
@@ -99,7 +99,9 @@ git pull
 
 `start` rebuilds the app image, so the new code runs straight away. Wait until Activity shows no running work first. A run that is active during a rebuild ends with "Interrupted by an app restart", and **Retry** resumes it.
 
-`./studio setup` keeps an engine that is already installed. To install a new engine version after a change to `engine/setup.sh`, run `./studio stop`, delete `~/Library/Application Support/ImageStudio/engine`, and run `./studio setup`.
+If an update changes the engine's flags in `studio`, run `./studio setup` instead of `start`, because only `setup` rewrites the login service.
+
+`./studio setup` doesn't replace a ComfyUI install that already exists. To install a new engine version after a change to `engine/setup.sh`, run `./studio stop`, delete `~/Library/Application Support/ImageStudio/engine`, and run `./studio setup`.
 
 ## Uninstall
 
@@ -112,7 +114,7 @@ docker compose down --rmi all
 rm -rf ~/Library/Application\ Support/ImageStudio
 ```
 
-The last command also empties the app's trash of deleted images. To remove the models too, delete the files listed in [step 2](#2-download-the-models).
+The last command also empties the app's trash of deleted images. To remove the models too, delete the files listed in [step 2](#2-download-the-models) and the three `*.dequant-bf16.safetensors` copies in `~/ComfyUI-Shared/models/text_encoders`.
 
 ## Troubleshooting
 

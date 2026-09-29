@@ -41,6 +41,8 @@ Two settings in the engine work around problems measured on the Apple GPU on 202
 - **The VAE runs on the CPU (`--cpu-vae`).** VAE encoding on the Apple GPU corrupts images. An encode and decode round trip had a mean error of 54/255 on the GPU, against 1.8 on the CPU, and edits came out grey and embossed.
 - **The text encoders are bf16 copies.** The official text encoders are int8 and need `aten::_int_mm`, which PyTorch lacks on the Apple GPU. On the CPU the 9B prompt enhancer managed about 0.4 tokens/s. `./studio setup` converts them once with `engine/dequantize.py`, and on the GPU the enhancer runs at about 11 tokens/s.
 
+Comfy Desktop has the same VAE problem on the same Mac. Its edits look grey unless it starts with `--cpu-vae`.
+
 The engine also runs with `--gpu-only`, which keeps the text encoders on the GPU. That made edits about 35% faster.
 
 ## The same paths inside and outside the container
@@ -53,7 +55,7 @@ The container mounts your home folder and `/Volumes` at the same absolute paths 
 
 ## How a generation runs
 
-Every generation is a run, and every run is a graph. A Create generation is a small graph: one Image node per attached image, feeding one Generate node. A workflow run uses the graph from the canvas. The executor stores a copy of the graph with the run, so later edits to the workflow don't change a run that already exists.
+Every generation is a run, and every run is a graph. A Create generation is a small graph, with one Image node for each attached image and one Generate node that they feed. A workflow run uses the graph from the canvas. The executor stores a copy of the graph with the run, so later edits to the workflow don't change a run that already exists.
 
 ```mermaid
 sequenceDiagram
@@ -81,13 +83,13 @@ sequenceDiagram
 
 Details that matter when you read the code:
 
-- **One engine prompt per image.** A Generate node with ×4 variations sends four prompts. The engine works through its queue first in, first out, so several runs interleave and each keeps its own progress.
+- **One engine prompt per image.** A Generate node with ×4 variations sends four prompts. The engine works through its queue first in, first out, so several runs interleave and each keeps its own progress. Improve is the exception. Its job goes to the front of the queue.
 - **A node's inputs are ordered.** Image 1 is the first input. When an upstream node makes several variations, the next node receives the first one.
 - **A failed node skips everything downstream of it.** Other branches of the same graph still finish.
 - **Prompts are rewritten before they reach the model.** "image 2", "img 2" and "picture 2" become `<image2>` when that input exists. A Transparent request wraps the prompt in the model's official RGBA wording.
 - **Remove background uses the same image model** with the prompt "Remove the background, and output a PNG image". It needs no extra model.
 - **If the engine is offline,** jobs wait and try again every 3 seconds. After a restart of the API server, runs that were queued or running end with "Interrupted by an app restart".
-- **After 10 idle minutes** the executor asks the engine to unload its models (`POST /free`), which frees tens of gigabytes of memory. `STUDIO_IDLE_MINUTES` changes the delay, and `0` turns it off.
+- **After 10 idle minutes** the executor asks the engine to unload its models (`POST /free`), which frees the memory they use. On an M5 Max the engine went from 38 GB to 1.3 GB. `STUDIO_IDLE_MINUTES` changes the delay, and `0` turns it off.
 
 ### Run and node states
 
@@ -96,10 +98,13 @@ A run is `queued`, then `running`, and ends as `done`, `failed` or `canceled`. E
 ```mermaid
 stateDiagram-v2
     [*] --> waiting
+    [*] --> done: image nodes, and steps Retry reuses
     waiting --> queued: all inputs done
     waiting --> skipped: an input failed
     waiting --> canceled: run canceled
     queued --> running: engine starts it
+    queued --> failed
+    queued --> canceled
     running --> done
     running --> failed
     running --> canceled
@@ -118,9 +123,9 @@ The browser opens one server-sent event stream, `GET /api/events`, and keeps it 
 | Event | Sent when |
 |---|---|
 | `engine` | The engine goes online or offline, or its queue changes |
-| `run` | A run is created, starts, or ends |
+| `run` | A run is created, makes progress, or ends |
 | `node` | A node changes state or reaches a new step |
-| `preview` | The engine sends a new latent preview, as a JPEG data URL |
+| `preview` | The engine sends a new latent preview, as an image data URL |
 | `folder` | Images are added to or removed from a folder |
 
 The engine talks to the API server over its own WebSocket. The API server translates those messages into the events above, so the browser only ever needs the one stream.
@@ -155,8 +160,8 @@ Image Studio has no login. It is meant for one person on one Mac, so it protects
 
 - **Local only.** Docker publishes port 4747 on `127.0.0.1` only, and the engine listens on `127.0.0.1:8199`.
 - **No DNS rebinding.** The server answers only requests whose `Host` is `127.0.0.1`, `localhost` or `::1`.
-- **No cross-site changes.** A request that changes data must come from the app's own page. Cross-site requests to `/api` are refused, and the app can't be shown inside another site's frame.
-- **Limited file access.** The file routes read and write only inside your home folder and `/Volumes`. They refuse `~/Library` (in any letter case), hidden folders, and macOS packages such as `.app` and `.photoslibrary`. The app's own runtime folder is the one exception.
+- **No cross-site changes.** A request that changes data is refused when its `Origin` names another site. Other sites also can't read `/api` from their pages, and the app can't be shown inside another site's frame.
+- **Limited file access.** The file routes read and write only inside your home folder and `/Volumes`. They refuse `~/Library` (in any letter case) and hidden folders. The app's own runtime folder is the one exception. The folder browser also hides macOS packages such as `.app` and `.photoslibrary`.
 
 ## Code map
 

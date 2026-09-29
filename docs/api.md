@@ -6,7 +6,7 @@ The web app uses a JSON API under `http://127.0.0.1:4747/api`. You can call it f
 
 - **Requests and responses are JSON,** except file uploads (multipart) and images (binary).
 - **Errors** return a status code and a body of the form `{"error": "A readable message"}`.
-- **Paths are absolute Mac paths,** such as `/Users/you/Pictures/Image Studio`. File routes accept paths inside your home folder and `/Volumes` only. They refuse `~/Library`, hidden folders and macOS packages.
+- **Paths are absolute Mac paths,** such as `/Users/you/Pictures/Image Studio`. File routes accept paths inside your home folder and `/Volumes` only. They refuse `~/Library` and hidden folders.
 - **Only local callers are served.** The `Host` header must be `127.0.0.1`, `localhost` or `::1`. A request that changes data and sends an `Origin` header must come from the same host and port. Tools like `curl` send no `Origin`, so they work from the Mac itself.
 
 ## Example
@@ -33,7 +33,7 @@ curl -s "http://127.0.0.1:4747/api/runs/$run" \
 | `GET` | `/api/status` | | `engine` (online, device, queue, version, error), `models` (which model files are present), `defaultFolder` |
 | `GET` | `/api/settings` | | `{"defaultFolder": "..."}` |
 | `PUT` | `/api/settings` | `{"defaultFolder": "/path"}` | The new setting. The folder is also added to the saved folders. |
-| `GET` | `/api/options` | | The sampler and scheduler names the engine offers |
+| `GET` | `/api/options` | | The sampler and scheduler names the engine offers, or a built-in list while the engine is offline |
 
 ## Generation
 
@@ -43,7 +43,7 @@ curl -s "http://127.0.0.1:4747/api/runs/$run" \
 | `POST` | `/api/remove-background` | `{"asset": "<asset id>", "folder": null, "quality": "standard"}` | `{"runId": "..."}` |
 | `POST` | `/api/enhance` | `{"prompt": "...", "images": ["<asset id>"]}` | `{"prompt": "...", "aspect": "16:9", "matchImage": false}` |
 
-`/api/enhance` runs the prompt enhancer and waits for its answer, which takes about 30 to 40 seconds. It uses the image-to-image enhancer when `images` is not empty. If the caller disconnects, the enhancer stops and the route returns `409`.
+`/api/enhance` runs the prompt enhancer and waits for its answer, which took about 45 seconds on an M5 Max, or about 65 seconds when the enhancer had to load first. It uses the image-to-image enhancer when `images` is not empty. If the caller disconnects, the enhancer stops and the route returns `409`.
 
 ### Create settings
 
@@ -61,8 +61,8 @@ curl -s "http://127.0.0.1:4747/api/runs/$run" \
 | `advanced.negative` | string | `""` | What to avoid |
 | `advanced.cfg` | 1 to 20, or `null` | `null` | Guidance. `null` means 1, or 4 when `negative` is set. |
 | `advanced.steps` | 1 to 100, or `null` | `null` | Overrides `quality` |
-| `advanced.sampler` | string | `euler` | One of the names from `/api/options` |
-| `advanced.scheduler` | string | `simple` | One of the names from `/api/options` |
+| `advanced.sampler` | string | `euler` | One of the names from `/api/options`. An unknown name falls back to `euler`. |
+| `advanced.scheduler` | string | `simple` | One of the names from `/api/options`. An unknown name falls back to `simple`. |
 | `advanced.refDetail` | `standard`, `high`, `original` | `standard` | How much detail of the input images the model reads |
 
 ## Runs
@@ -138,11 +138,11 @@ Uploads accept PNG, JPEG, WebP, GIF, BMP, TIFF, HEIC and HEIF. Folder listings s
 |---|---|
 | `engine` | The same object as `status.engine` |
 | `run` | A run summary |
-| `node` | `runId`, `nodeId`, and the node's status, step, steps, progress and outputs |
-| `preview` | `runId`, `nodeId`, and `image` as a JPEG data URL (at most 3 per second per node) |
+| `node` | `runId`, `nodeId`, and the node's status, step, steps, progress, outputs and error |
+| `preview` | `runId`, `nodeId`, and `image` as an image data URL (at most 3 per second per node) |
 | `folder` | `{"path": "..."}` of a folder whose images changed |
 
-The server sends a comment line every 15 seconds to keep the connection open. To watch the stream from a terminal, run:
+After 15 seconds without an event, the server sends a comment line to keep the connection open. To watch the stream from a terminal, run:
 
 ```sh
 curl -N http://127.0.0.1:4747/api/events

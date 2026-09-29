@@ -10,7 +10,7 @@ Create is one prompt box. Type what you want and press **Generate** (⌘↵, or 
 
 ![Create: typing a prompt about a café chalkboard sign and watching the image sharpen step by step](images/create-live.gif)
 
-Before your first run, three example prompts sit below the box. Click one to try it.
+When Recent is empty, three example prompts sit below the box. Click one to try it.
 
 ### Edit and combine images
 
@@ -52,17 +52,17 @@ The sliders button opens **More settings**:
 |---|---|
 | Quality | Fast, Standard or Best: 16, 28 or 40 sampling steps |
 | Seed | **Random** makes a new image every time. **Fixed** repeats a result. |
-| Avoid | A negative prompt: what to keep out of the image. It makes generation about twice as slow. |
+| Avoid | A negative prompt: what to keep out of the image. The app marks it "about 2× slower". |
 | Guidance | How closely the model follows the prompt. Auto is 1, or 4 when Avoid is filled in. |
 | Steps | Overrides the step count that Quality sets |
 | Sampler and scheduler | The options the engine offers. The default is Euler with Simple. |
 | Reference detail | With images attached: how much detail the model reads from them. Standard, High (2K) or Original size. |
 
-**Reset to defaults** at the bottom puts everything back. The app remembers your settings and save folder in this browser.
+When any of these differs from its default, **Reset to defaults** appears at the bottom and puts them back. The app remembers your settings and save folder in this browser.
 
 ### Improve a prompt
 
-**Improve** sends your prompt to Qwen's own prompt enhancer, which rewrites it in detail and suggests an aspect ratio. With images attached it uses the image-aware enhancer, which looks at them too. It takes about 30 to 40 seconds. Click it again to stop, or click **Undo improve** to get your words back.
+**Improve** sends your prompt to Qwen's own prompt enhancer, which rewrites it in detail and sets the aspect ratio it suggests. With images attached it uses the image-aware enhancer, which looks at them too. On an M5 Max it took about 45 seconds, or about 65 seconds when the enhancer had to load first. Click it again to stop, or click **Undo improve** to get your words back.
 
 ### Choose where images go
 
@@ -70,7 +70,7 @@ The sliders button opens **More settings**:
 
 ### Recent
 
-Recent lists your last 24 Create runs. Each one has **Edit again**, which puts its prompt, settings and input images back in the box. **All activity** opens the Activity screen.
+Recent lists up to 24 of your latest Create runs. Each finished one has **Edit again**, which puts its prompt, settings and input images back in the box. **All activity** opens the Activity screen.
 
 Click a result to open it large. A result made from exactly one input image has a slider that compares the two.
 
@@ -95,7 +95,7 @@ The toolbar at the bottom of the canvas adds nodes:
 
 - Drag from the dot on the right of a node onto another node. The connection's number is the input's position: input 1 is "image 1" in the prompt.
 - Drop a connection on empty canvas to open a menu that adds the next step there.
-- Click a connection and press Delete to remove it. To move it, drag its arrow end onto another node.
+- Click a connection and press Delete to remove it. To move it, drag the end that touches the receiving node onto another node.
 - The canvas refuses loops, and notes don't connect to anything.
 
 ### Node settings
@@ -103,14 +103,14 @@ The toolbar at the bottom of the canvas adds nodes:
 Click a node to open its settings on the right. A Generate node has the same prompt box and options as Create, plus:
 
 - the order of its inputs, which you can drag to change,
-- **Auto-improve**, which runs Improve with the node's real input images at run time (about 30 seconds more), and
+- **Auto-improve**, which runs Improve with the node's real input images when the run starts, and
 - **Save to**, a folder for this node's results.
 
 ![The settings panel of Generate 1: its prompt, its two input images in order, options, Auto-improve and Save to](images/node-panel.webp)
 
 ### Run a workflow
 
-Press **Run** (⌘↵, or Ctrl+Enter). The run opens and shows each node's state: done, running with a live preview, waiting for its inputs, failed, or skipped because an earlier step failed.
+Press **Run** (⌘↵, or Ctrl+Enter). The run starts in the background and the editor stays open. The notice that appears has a **View** button, which opens the run. The run view shows each node's state: done, running with a live preview, waiting for its inputs, failed, or skipped because an earlier step failed.
 
 ![A running workflow: the first two steps are done, Generate 1 is at step 20 of 28, and Generate 2 waits for its input](images/run-view.webp)
 
@@ -142,7 +142,7 @@ Activity lists every run from Create and from workflows, with the running ones a
 - **Cancel** stops a run.
 - **Retry** starts a failed or canceled run again and reuses the steps that finished.
 - **Run again** makes a finished run's images again from scratch, with the same graph and settings, even if you edited the workflow since.
-- Activity shows the newest 60 runs.
+- Activity loads the newest 60 runs when it opens.
 
 ## Library
 
@@ -163,7 +163,7 @@ Library shows the folders you save to and the images in them, newest first.
 
 Two buttons sit at the bottom of the left rail.
 
-- **The dot** shows the engine. It is green when ready, pulses purple while generating, and turns red when the engine or the app is offline. Click it to see which model files are present and what to run if something is missing.
+- **The dot** shows the engine. It is green when ready, pulses purple while generating, and turns red when the engine or the app is offline. Click it to see whether each model is ready or missing. When something is offline, it also shows the command to run.
 - **The theme button** switches between System, Light and Dark. System follows your Mac's setting as it changes.
 
 ## Keyboard shortcuts

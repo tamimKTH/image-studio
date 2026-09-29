@@ -51,7 +51,7 @@ Without `STUDIO_API`, the dev server sends `/api` requests to the installed app 
 | `STUDIO_STATIC_DIR` | `/srv/static` in Docker, else `frontend/dist` | API server | The built web app to serve |
 | `STUDIO_API` | `http://127.0.0.1:4747` | Vite dev server | Where `/api` requests go |
 
-Docker Compose passes only `STUDIO_HOME`, `STUDIO_RUNTIME_DIR`, `STUDIO_ENGINE_URL` and `TZ` into the container.
+Docker Compose passes only `STUDIO_HOME`, `STUDIO_RUNTIME_DIR`, `STUDIO_ENGINE_URL` and `TZ` into the container. A custom `STUDIO_MODELS_DIR` therefore reaches the engine but not the containerized API server, whose model check and Improve still look in the default folder.
 
 ## Check your changes
 
