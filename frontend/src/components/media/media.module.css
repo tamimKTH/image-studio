@@ -243,7 +243,8 @@
   gap: 8px;
   margin-top: auto;
 }
-.panelActions > * {
+.panelActions > *,
+.panelActions > a > * {
   justify-content: flex-start;
 }
 

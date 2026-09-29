@@ -32,13 +32,13 @@
   font-size: var(--text-lg);
 }
 .primary {
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--on-accent);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 40%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 .primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent-fill-hover);
 }
 .secondary {
   background: var(--surface);

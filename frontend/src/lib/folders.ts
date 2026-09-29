@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api, type Folder } from "./api";
+import { useLive } from "./events";
 
 interface FolderState {
   folders: Folder[];
@@ -19,6 +20,14 @@ export const useFolderStore = create<FolderState>((set) => ({
     set({ folders, defaultFolder: settings.defaultFolder, loaded: true });
   },
 }));
+
+// Image counts and covers change whenever images are saved or deleted: reload shortly after each such event.
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+useLive.subscribe((state, previous) => {
+  if (state.folderVersion === previous.folderVersion || !useFolderStore.getState().loaded) return;
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => useFolderStore.getState().refresh().catch(() => undefined), 400);
+});
 
 /** Loads the folder list once and returns it. */
 export function useFolders() {

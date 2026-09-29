@@ -286,12 +286,16 @@
   background: var(--surface) !important;
   transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-/* A larger invisible target around each dot, so connections are easy to start and drop. */
+/* A larger invisible target around each output dot, so connections are easy to start. Input dots stay
+   small: the end of a connection lies right next to them and must stay easy to grab (to move it). */
 .handle::after {
   content: "";
   position: absolute;
-  inset: -10px;
+  inset: -3px;
   border-radius: 50%;
+}
+.handle:global(.source)::after {
+  inset: -10px;
 }
 .handle:hover {
   background: var(--accent) !important;
@@ -884,7 +888,7 @@
 }
 .st_done {
   background: var(--success-soft);
-  color: var(--success);
+  color: var(--success-text);
 }
 .st_failed {
   background: var(--danger-soft);

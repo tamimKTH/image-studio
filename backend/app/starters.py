@@ -25,7 +25,7 @@ STARTERS = {
                   {"id": "g1", "type": "generate", "position": {"x": STEP, "y": 0},
                    "data": generate_data("Put image 2 into image 1, matching the lighting", ["i1", "i2"])}],
         "edges": [_edge("i1", "g1"), _edge("i2", "g1")]}),
-    "cutout": ("Cut out and restage", lambda: {
+    "cutout": ("Cut out and place", lambda: {
         "nodes": [_image("i1", 0, 0),
                   {"id": "r1", "type": "removeBackground", "position": {"x": STEP, "y": 0},
                    "data": {"folder": None, "quality": "standard"}},

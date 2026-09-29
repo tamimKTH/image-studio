@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity as ActivityIcon, RotateCcw, Sparkles, Square, Workflow, X } from "lucide-react";
+import { Activity as ActivityIcon, Sparkles, Square, Workflow, X } from "lucide-react";
 import { api, type RunSummary } from "../lib/api";
 import { useLive, usePreview } from "../lib/events";
 import { duration, plural, timeAgo } from "../lib/format";
@@ -211,7 +211,7 @@ function RunRow({ run }: { run: RunSummary }) {
         ) : (
           <>
             <IconButton label={again.label} title={again.title} onClick={runAgain}>
-              <RotateCcw size={16} />
+              <again.Icon size={16} />
             </IconButton>
             <IconButton label="Remove from history (images stay in their folder)" onClick={remove}>
               <X size={16} />

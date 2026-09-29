@@ -1,5 +1,6 @@
 // Image slots for Create runs: what each run is expected to produce, live progress, and actions on results.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { RefreshCw, RotateCcw } from "lucide-react";
 import {
   api,
   type Asset,
@@ -226,11 +227,11 @@ export async function runAgain(run: RunSummary): Promise<string> {
   return (await api.retryRun(run.id, run.status === "done")).runId;
 }
 
-/** "Run again" for a finished run, "Retry" (resume) for a failed or canceled one. */
-export function runAgainLabel(run: RunSummary): { label: string; title: string } {
+/** "Run again" for a finished run, "Retry" (resume) for a failed or canceled one — each with its own icon. */
+export function runAgainLabel(run: RunSummary): { label: string; title: string; Icon: typeof RefreshCw } {
   return run.status === "done"
-    ? { label: "Run again", title: "Make it again with the same settings" }
-    : { label: "Retry", title: "Run what didn't finish — images already made are kept" };
+    ? { label: "Run again", title: "Make it again with the same settings", Icon: RefreshCw }
+    : { label: "Retry", title: "Run what didn't finish — images already made are kept", Icon: RotateCcw };
 }
 
 /** Asset for a result (to use it as an input). */

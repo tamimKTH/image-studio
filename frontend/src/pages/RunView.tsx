@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Background, BackgroundVariant, Controls, ReactFlow, ReactFlowProvider, type Edge } from "@xyflow/react";
-import { AlertTriangle, ArrowLeft, Pencil, RotateCcw, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Pencil, Square } from "lucide-react";
 import { api, type OutputImage, type RunDetail, type RunStatus } from "../lib/api";
 import { useRun } from "../lib/events";
 import { duration, plural } from "../lib/format";
@@ -144,6 +144,7 @@ function WorkflowRun({ run }: { run: RunDetail }) {
   }
 
   const progress = runProgress(run);
+  const again = runAgainLabel(run);
   // The step belongs to the node that is running now; once it is done, no stale step is shown.
   const current = active && run.current && run.nodes[run.current.nodeId]?.status === "running" ? run.current : null;
   const detail =
@@ -183,8 +184,8 @@ function WorkflowRun({ run }: { run: RunDetail }) {
             Cancel
           </Button>
         ) : (
-          <Button variant="primary" icon={<RotateCcw size={15} />} onClick={runAgain} loading={busy} title={runAgainLabel(run).title}>
-            {runAgainLabel(run).label}
+          <Button variant="primary" icon={<again.Icon size={15} />} onClick={runAgain} loading={busy} title={again.title}>
+            {again.label}
           </Button>
         )}
       </header>

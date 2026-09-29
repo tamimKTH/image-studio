@@ -117,6 +117,26 @@ function keepCopied(clip: NodeClipboard) {
   }
 }
 
+/** Everything on the system clipboard (for Ctrl+V on a Mac, which fires no paste event); null if it can't be read. */
+async function readClipboard(): Promise<{ text: string; files: File[] } | null> {
+  try {
+    let text = "";
+    const files: File[] = [];
+    for (const item of await navigator.clipboard.read()) {
+      const image = item.types.find((t) => t.startsWith("image/"));
+      if (image) {
+        const blob = await item.getType(image);
+        files.push(new File([blob], `pasted.${image.split("/")[1]}`, { type: image }));
+      } else if (item.types.includes("text/plain")) {
+        text = await (await item.getType("text/plain")).text();
+      }
+    }
+    return { text, files };
+  } catch {
+    return null;
+  }
+}
+
 /** The newest copy wins: the system clipboard (it may come from another tab); this tab's copy only when it can't be read. */
 async function copiedNodes(): Promise<NodeClipboard | null> {
   let text: string;
@@ -167,6 +187,26 @@ function Editor({ workflow }: { workflow: Workflow }) {
   const runningRef = useRef(false);
   const moving = useRef<{ edge: Edge; done: boolean } | null>(null);
   const moreMenu = usePopover();
+
+  // Ctrl + mouse wheel (the Windows way to zoom) arrives like a trackpad pinch, which React Flow zooms 10× harder.
+  // A real wheel notch (large delta) zooms by a gentle, fixed step around the pointer; pinches stay as they are.
+  useEffect(() => {
+    const el = wrapper.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey || e.metaKey || (e.deltaMode === 0 && Math.abs(e.deltaY) < 40)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const r = el.getBoundingClientRect();
+      const { x, y, zoom } = flow.getViewport();
+      const next = Math.min(2, Math.max(0.2, zoom * (e.deltaY > 0 ? 1 / 1.15 : 1.15)));
+      const px = e.clientX - r.left;
+      const py = e.clientY - r.top;
+      flow.setViewport({ x: px - ((px - x) / zoom) * next, y: py - ((py - y) / zoom) * next, zoom: next });
+    };
+    el.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => el.removeEventListener("wheel", onWheel, { capture: true });
+  }, [flow]);
 
   // ---------- autosave ----------
   const graph = useMemo(() => fromFlow(g.nodes, g.edges), [g.nodes, g.edges]);
@@ -351,14 +391,18 @@ function Editor({ workflow }: { workflow: Workflow }) {
     (assets: Asset[], at?: { x: number; y: number }) => {
       const c = viewCenter();
       let p = at ?? { x: c.x - NODE_WIDTH / 2, y: c.y - nodeHeight("image") / 2 };
+      const ids: string[] = [];
       for (const a of assets) {
         rememberAsset(a);
         p = freeSpot(p, "image", nodesRef.current);
-        addNode("image", p, { data: { asset: a.id } });
+        ids.push(addNode("image", p, { data: { asset: a.id } }));
       }
+      toast(`Added ${plural(ids.length, "image")}`);
+      reveal(ids, true);
     },
-    [addNode, nodesRef, viewCenter],
+    [addNode, nodesRef, viewCenter, reveal],
   );
+
 
   // ---------- connections ----------
   const isValidConnection = useCallback(
@@ -443,6 +487,37 @@ function Editor({ workflow }: { workflow: Workflow }) {
       }
     },
     [flow, paste, reveal],
+  );
+
+  /** Pastes whatever the clipboard holds: copied nodes, a copied workflow (its nodes), or image files. */
+  const pasteContent = useCallback(
+    async (text: string, files: File[]): Promise<boolean> => {
+      let data: unknown = null;
+      if (text.trim().startsWith("{")) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+      }
+      if (isNodeClipboard(data)) {
+        pasteClip(data);
+        return true;
+      }
+      if (isWorkflowExport(data) && (data as { graph?: { nodes?: unknown } }).graph) {
+        pasteClip((data as unknown as { graph: { nodes: GraphNode[]; edges: GraphEdge[] } }).graph);
+        return true;
+      }
+      if (!files.length) return false;
+      try {
+        const assets = await uploadImages(files);
+        if (assets.length) addImages(assets);
+      } catch (err) {
+        toast((err as Error).message, { tone: "error" });
+      }
+      return true;
+    },
+    [pasteClip, addImages],
   );
 
   // Dropping image files on the canvas makes image nodes where they land.
@@ -536,44 +611,21 @@ function Editor({ workflow }: { workflow: Workflow }) {
       } else if (key === "v") {
         // ⌘V on a Mac and Ctrl+V elsewhere also fire the browser's paste event, handled below.
         if (isMac ? e.metaKey : e.ctrlKey) return;
+        // Ctrl+V on a Mac fires no paste event: read the clipboard (text and images) directly.
         e.preventDefault();
-        void copiedNodes().then((clip) => clip && pasteClip(clip));
+        void readClipboard().then(async (c) => {
+          if (c && (await pasteContent(c.text, c.files))) return;
+          const clip = await copiedNodes();
+          if (clip) pasteClip(clip);
+        });
       }
     };
     const onPaste = async (e: ClipboardEvent) => {
       if (inTextField(e) || modalOpen()) return;
+      e.preventDefault();
       const text = e.clipboardData?.getData("text/plain") ?? "";
-      let data: unknown = null;
-      if (text.trim().startsWith("{")) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = null;
-        }
-      }
-      if (isNodeClipboard(data)) {
-        e.preventDefault();
-        pasteClip(data);
-        return;
-      }
-      if (isWorkflowExport(data) && (data as { graph?: { nodes?: unknown } }).graph) {
-        // A whole copied workflow pasted into this one: its nodes are added here.
-        e.preventDefault();
-        pasteClip((data as unknown as { graph: { nodes: GraphNode[]; edges: GraphEdge[] } }).graph);
-        return;
-      }
-      if (e.clipboardData?.files.length) {
-        e.preventDefault();
-        try {
-          const assets = await uploadImages(e.clipboardData.files);
-          if (assets.length) addImages(assets);
-        } catch (err) {
-          toast((err as Error).message, { tone: "error" });
-        }
-        return;
-      }
+      if (await pasteContent(text, Array.from(e.clipboardData?.files ?? []))) return;
       if (!text) {
-        e.preventDefault();
         const clip = await copiedNodes();
         if (clip) pasteClip(clip);
       }
@@ -584,7 +636,7 @@ function Editor({ workflow }: { workflow: Workflow }) {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("paste", onPaste);
     };
-  }, [undo, redo, duplicateSelected, selectAll, selectOnly, run, addImages, copy, cut, pasteClip]);
+  }, [undo, redo, duplicateSelected, selectAll, selectOnly, run, copy, cut, pasteClip, pasteContent]);
 
   // ---------- panel ----------
   const selected = g.nodes.filter((n) => n.selected);
@@ -710,7 +762,7 @@ function Editor({ workflow }: { workflow: Workflow }) {
               onReconnect={onReconnect}
               onReconnectStart={onReconnectStart}
               onReconnectEnd={onReconnectEnd}
-              reconnectRadius={18}
+              reconnectRadius={24}
               connectionRadius={34}
               isValidConnection={isValidConnection}
               onNodeDragStart={g.onNodeDragStart}

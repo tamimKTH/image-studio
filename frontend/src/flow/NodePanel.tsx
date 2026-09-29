@@ -2,14 +2,14 @@
 import { useRef, useState } from "react";
 import type { Edge } from "@xyflow/react";
 import { Brush, Copy, GripVertical, Image as ImageIcon, ImagePlus, Scissors, Sparkles, Trash2, X } from "lucide-react";
-import type { Asset, GenerateSettings, NodeState } from "../lib/api";
+import type { Asset, GenerateSettings, NodeState, RemoveBackgroundNodeData } from "../lib/api";
 import { isMac, shortcut } from "../lib/keys";
 import { ImproveButton, PromptBox } from "../components/composer/PromptBox";
 import { OptionsBar } from "../components/composer/OptionsBar";
 import { MarkArea } from "../components/composer/MarkArea";
 import { uploadImages } from "../components/composer/ImageStrip";
 import { FolderPicker } from "../components/folders/FolderPicker";
-import { Button, IconButton, Switch, cx, toast } from "../components/ui";
+import { Button, IconButton, Segmented, Switch, cx, toast } from "../components/ui";
 import { rememberAsset, useAsset } from "./assets";
 import { nodeTitle, type FlowNode, type GenerateFlowNode, type ImageFlowNode } from "./graph";
 import s from "./flow.module.css";
@@ -49,6 +49,18 @@ export function NodePanel(props: Props) {
         {node.type === "removeBackground" && (
           <>
             <p className={s.muted}>Cuts the main subject out of its input and saves it as a transparent PNG. Connect one image or result into it.</p>
+            <div className={s.section}>
+              <Segmented
+                label="Quality"
+                value={(node.data as RemoveBackgroundNodeData).quality ?? "standard"}
+                onChange={(quality) => props.onChange(node.id, { quality })}
+                options={[
+                  { value: "fast", label: "Fast", title: "16 steps" },
+                  { value: "standard", label: "Standard", title: "28 steps" },
+                  { value: "best", label: "Best", title: "40 steps" },
+                ]}
+              />
+            </div>
             <FolderSection {...props} />
           </>
         )}
@@ -98,13 +110,13 @@ function GenerateSettingsPanel({ node, nodes, edges, states, onChange, onRun, ..
             }
             onSubmit={onRun}
             minHeight={88}
-            autoFocus={!data.prompt}
           />
           <div className={s.promptTools}>
             <ImproveButton
               prompt={data.prompt}
               images={imageAssets}
               onChange={(prompt) => set({ prompt })}
+              aspect={data.aspect}
               onAspect={(aspect) => set({ aspect })}
             />
           </div>

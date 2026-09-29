@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Copy, Download, ImagePlus, Pencil, RotateCcw, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, ImagePlus, Pencil, Square, Trash2 } from "lucide-react";
 import { api, defaultAdvanced, type OutputImage, type RunDetail } from "../lib/api";
 import { duration, shortPath, timeAgo } from "../lib/format";
 import { sendToCreate } from "../lib/handoff";
@@ -143,7 +143,7 @@ export function CreateRunView({ run }: { run: RunDetail }) {
               Cancel
             </Button>
           ) : (
-            <Button icon={<RotateCcw size={16} />} onClick={runAgain} title={again.title}>
+            <Button icon={<again.Icon size={16} />} onClick={runAgain} title={again.title}>
               {again.label}
             </Button>
           )}

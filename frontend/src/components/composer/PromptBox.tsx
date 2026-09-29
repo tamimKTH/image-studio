@@ -51,6 +51,8 @@ interface ImproveProps {
   prompt: string;
   images: string[];
   onChange: (prompt: string) => void;
+  /** The aspect in use now, so undoing an improvement also puts back the aspect it replaced. */
+  aspect?: Aspect;
   /** Called with the suggested aspect ("auto" means follow image 1). */
   onAspect?: (aspect: Aspect) => void;
   onBusyChange?: (busy: boolean) => void;
@@ -63,9 +65,9 @@ interface ImproveProps {
  * ✨ Improve: rewrites the prompt with the model's own prompt enhancer. Click again to stop.
  * Afterwards "Undo improve" stays until the prompt is edited, improved again or `resetKey` changes.
  */
-export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange, size = "sm", resetKey }: ImproveProps) {
+export function ImproveButton({ prompt, images, onChange, aspect, onAspect, onBusyChange, size = "sm", resetKey }: ImproveProps) {
   const [busy, setBusy] = useState(false);
-  const [undo, setUndo] = useState<{ original: string; improved: string } | null>(null);
+  const [undo, setUndo] = useState<{ original: string; improved: string; aspect?: Aspect } | null>(null);
   // The improver shares the engine: with other work in the queue it starts right after the current image.
   const queue = useLive((st) => st.engine?.queue ?? 0);
   const waiting = busy && queue > 1;
@@ -75,23 +77,29 @@ export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange
   useEffect(() => setUndo(null), [resetKey]);
   const canUndo = !busy && undo !== null && prompt === undo.improved;
 
+  function restore(before: { original: string; aspect?: Aspect }) {
+    onChange(before.original);
+    if (before.aspect) onAspect?.(before.aspect);
+    setUndo(null);
+  }
+
   async function run() {
     if (busy) {
       abort.current?.abort();
       return;
     }
-    const previous = prompt;
+    const previous = { original: prompt, aspect };
     abort.current = new AbortController();
     setUndo(null);
     setBusy(true);
     try {
       const r = await api.enhance(prompt, images, abort.current.signal);
       onChange(r.prompt);
-      setUndo({ original: previous, improved: r.prompt });
+      setUndo({ ...previous, improved: r.prompt });
       if (r.matchImage) onAspect?.("auto");
       else if (r.aspect) onAspect?.(r.aspect);
       toast(r.aspect && !r.matchImage ? `Prompt improved · aspect set to ${r.aspect}` : "Prompt improved", {
-        action: { label: "Undo", onClick: () => onChange(previous) },
+        action: { label: "Undo", onClick: () => restore(previous) },
       });
     } catch (e) {
       if ((e as Error).name !== "AbortError") toast((e as Error).message, { tone: "error" });
@@ -124,11 +132,8 @@ export function ImproveButton({ prompt, images, onChange, onAspect, onBusyChange
           size={size}
           variant="ghost"
           icon={<Undo2 size={15} />}
-          title="Put back the prompt you wrote"
-          onClick={() => {
-            onChange(undo.original);
-            setUndo(null);
-          }}
+          title="Put back the prompt you wrote (and its aspect)"
+          onClick={() => restore(undo)}
         >
           Undo improve
         </Button>

@@ -102,21 +102,26 @@ interface PopoverProps {
 /** Floating panel anchored to an element. Closes on outside click and Escape; flips when there is no room. */
 export function Popover({ anchor, open, onClose, placement = "bottom-start", title, width, children }: PopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
 
   const place = useCallback(() => {
     const a = anchor.current?.getBoundingClientRect();
     const el = ref.current;
     if (!a || !el) return;
     const w = el.offsetWidth;
-    const h = el.offsetHeight;
+    const h = el.scrollHeight;
     const gap = 8;
-    let top = placement.startsWith("bottom") ? a.bottom + gap : a.top - h - gap;
-    if (placement.startsWith("bottom") && top + h > window.innerHeight - 12) top = Math.max(12, a.top - h - gap);
-    if (placement.startsWith("top") && top < 12) top = a.bottom + gap;
+    const margin = 12;
+    const below = window.innerHeight - a.bottom - gap - margin;
+    const above = a.top - gap - margin;
+    // The preferred side when the panel fits there, else the roomier side. It scrolls rather than covering its button.
+    const fitsPreferred = placement.startsWith("bottom") ? h <= below : h <= above;
+    const useBelow = placement.startsWith("bottom") ? fitsPreferred || below >= above : !(fitsPreferred || above >= below);
+    const maxHeight = Math.max(120, Math.min(520, useBelow ? below : above));
+    const top = useBelow ? a.bottom + gap : a.top - gap - Math.min(h, maxHeight);
     let left = placement.endsWith("start") ? a.left : a.right - w;
-    left = Math.min(Math.max(12, left), window.innerWidth - w - 12);
-    setPos({ top, left });
+    left = Math.min(Math.max(margin, left), window.innerWidth - w - margin);
+    setPos({ top, left, maxHeight });
   }, [anchor, placement]);
 
   useLayoutEffect(() => {
@@ -154,7 +159,7 @@ export function Popover({ anchor, open, onClose, placement = "bottom-start", tit
       ref={ref}
       role="dialog"
       className={s.popover}
-      style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, width, visibility: pos ? "visible" : "hidden" }}
+      style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, maxHeight: pos?.maxHeight, width, visibility: pos ? "visible" : "hidden" }}
     >
       {title && <div className={s.popoverTitle}>{title}</div>}
       {children}

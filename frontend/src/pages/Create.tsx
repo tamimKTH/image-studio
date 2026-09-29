@@ -294,6 +294,7 @@ export function Create() {
                 prompt={prompt}
                 images={images.map((i) => i.id)}
                 onChange={setPrompt}
+                aspect={settings.aspect}
                 onAspect={(aspect) => setSettings((st) => ({ ...st, aspect }))}
                 onBusyChange={setImproving}
                 resetKey={generated}

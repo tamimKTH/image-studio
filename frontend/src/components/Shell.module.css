@@ -60,7 +60,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: var(--radius-full);
-  background: var(--accent);
+  background: var(--accent-fill);
   color: var(--on-accent);
   font-size: 11px;
   font-weight: 700;
@@ -184,7 +184,7 @@
 }
 
 .ok {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .missing {

@@ -36,9 +36,13 @@
   --border-strong: #d2d2da;
   --text: #17171c;
   --text-2: #55555f;
-  --text-3: #8a8a95;
+  --text-3: #6a6a76;
   --accent: #6b4dff;
   --accent-hover: #5a38f7;
+  /* Filled backgrounds that carry white text (buttons, badges): at least 4.5:1 in both themes. */
+  --accent-fill: #6b4dff;
+  --accent-fill-hover: #5a38f7;
+  --success-text: #0f7a37;
   --accent-soft: #efebff;
   --accent-soft-text: #4b2fd6;
   --on-accent: #ffffff;
@@ -70,9 +74,12 @@
     --border-strong: #33333d;
     --text: #f3f3f6;
     --text-2: #b3b3bd;
-    --text-3: #7b7b87;
+    --text-3: #8b8b97;
     --accent: #8a6dff;
     --accent-hover: #9c84ff;
+    --accent-fill: #6a4cf0;
+    --accent-fill-hover: #5b3fe0;
+    --success-text: #2fc265;
     --accent-soft: #231c40;
     --accent-soft-text: #c3b4ff;
     --success-soft: #10291a;
@@ -98,9 +105,12 @@
   --border-strong: #33333d;
   --text: #f3f3f6;
   --text-2: #b3b3bd;
-  --text-3: #7b7b87;
+  --text-3: #8b8b97;
   --accent: #8a6dff;
   --accent-hover: #9c84ff;
+  --accent-fill: #6a4cf0;
+  --accent-fill-hover: #5b3fe0;
+  --success-text: #2fc265;
   --accent-soft: #231c40;
   --accent-soft-text: #c3b4ff;
   --success-soft: #10291a;

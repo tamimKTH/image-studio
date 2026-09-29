@@ -141,16 +141,17 @@ def check_graph(graph: dict[str, Any] | None) -> dict[str, Any]:
     return graph
 
 
-def unique_name(name: str, copy: bool) -> str:
-    """'X' if free (unless `copy`), else 'X copy', 'X copy 2', … like Finder."""
+def unique_name(name: str, copy: bool, word: str = "copy") -> str:
+    """'X' if free (unless `copy`), else 'X copy', 'X copy 2', … like Finder. With `word=""` it numbers: 'X 2', 'X 3'."""
     name = name.strip()[:120] or "Untitled workflow"
     taken = {r["name"] for r in db.all_rows("SELECT name FROM workflows")}
     if not copy and name not in taken:
         return name
-    base = re.sub(r" copy(?: \d+)?$", "", name)
-    candidate, n = f"{base} copy", 2
+    stem = f" {word}" if word else ""
+    base = re.sub(rf"{stem}(?: \d+)?$", "", name) or name
+    candidate, n = (f"{base}{stem}", 2) if word else (f"{base} 2", 3)
     while candidate in taken:
-        candidate, n = f"{base} copy {n}", n + 1
+        candidate, n = f"{base}{stem} {n}", n + 1
     return candidate
 
 
@@ -442,7 +443,7 @@ async def create_workflow(body: WorkflowBody) -> dict:
     else:
         starter_name, graph = starters.build(body.starter or "blank")
         name = body.name or starter_name
-    return insert_workflow(name, graph, body.folder)
+    return insert_workflow(unique_name(name, copy=False, word=""), graph, body.folder)
 
 
 @router.get("/workflows/{workflow_id}")
