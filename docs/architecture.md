@@ -9,23 +9,21 @@ For the HTTP routes, see the [API reference](api.md). For install steps, see [Se
 ```mermaid
 flowchart LR
     UI["Browser<br/>React web app"] -->|"HTTP /api"| API
+    API -.->|"server-sent events"| UI
 
     subgraph Docker["Docker container · 127.0.0.1:4747"]
         API["FastAPI server"] --> EX["Executor"]
         EX --> DB[("SQLite<br/>studio.db")]
+        EX -->|"saves PNG"| FILES[("Your folders<br/>mounted from the Mac")]
     end
 
     EX -->|"HTTP prompts"| ENG
+    ENG -.->|"WebSocket progress"| EX
 
     subgraph Native["Native on macOS · 127.0.0.1:8199"]
         ENG["ComfyUI + GGUF<br/>launchd agent"] --> GPU["Apple GPU"]
+        ENG -->|loads| MODELS[("Model files")]
     end
-
-    ENG -.->|"WebSocket progress"| EX
-    API -.->|"server-sent events"| UI
-    ENG -->|loads| MODELS[("Model files")]
-    DB ~~~ FILES
-    EX ---->|"saves PNG"| FILES[("Your folders")]
 ```
 
 - **The web app** is a React single-page app. The API server serves its built files, so there is one address to open: `http://127.0.0.1:4747`.
