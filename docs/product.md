@@ -42,7 +42,7 @@ The row under the prompt holds the options you change most:
 | Aspect ratio | 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, and **Match image 1** when images are attached |
 | Size | **1K** (about 1 megapixel) or **2K** (2048 × 2048 at 1:1) |
 | Variations | ×1 to ×4 |
-| **Transparent** | Makes a PNG with a transparent background |
+| **Transparent** | Makes a PNG with a transparent background. It turns on by itself when image 1 is transparent. |
 
 The sliders button opens **More settings**:
 
@@ -59,6 +59,8 @@ The sliders button opens **More settings**:
 | Reference detail | With images attached: how much detail the model reads from them. Standard, High (2K) or Original size. |
 
 When any of these differs from its default, **Reset to defaults** appears at the bottom and puts them back. The app remembers your settings and save folder in this browser.
+
+Only a result made with **Transparent** on keeps transparency. With it off, transparent input images are flattened onto white first, so the result is a complete picture. That is what you want when you place a cut-out subject into a new scene.
 
 ### Improve a prompt
 
@@ -86,7 +88,7 @@ The toolbar at the bottom of the canvas adds nodes:
 
 | Node | What it does | Inputs |
 |---|---|---|
-| **Image** | A picture from your Mac. **Replace image** and **Mark area** are in its settings. | None |
+| **Image** | A picture from your Mac. The card takes the picture's shape, and clicking the picture shows it full size. **Replace image** and **Mark area** are in its settings. | None |
 | **Generate** | Makes images from a prompt and the images connected to it | Up to 10 |
 | **Remove background** | Cuts out the subject of one image | Exactly 1 |
 | **Note** | A sticky note in yellow, blue, green, pink or gray. Drag its corner to resize it. | None |
@@ -105,6 +107,8 @@ Click a node to open its settings on the right. A Generate node has the same pro
 - the order of its inputs, which you can drag to change,
 - **Auto-improve**, which runs Improve with the node's actual input images when the node starts, after the steps before it finish, and
 - **Save to**, a folder for this node's results.
+
+A Generate node keeps its own **Transparent** setting. Unlike Create, it doesn't switch on by itself.
 
 ![The settings panel of Generate 1: its prompt, its two input images in order, options, Auto-improve and Save to](images/node-panel.webp)
 

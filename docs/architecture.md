@@ -83,6 +83,7 @@ Details that matter when you read the code:
 - **A node's inputs are ordered.** Image 1 is the first input. When an upstream node makes several variations, the next node receives the first one.
 - **A failed node skips everything downstream of it.** Other branches of the same graph still finish.
 - **Prompts are rewritten before they reach the model.** "image 2", "img 2" and "picture 2" become `<image2>` when that input exists. A Transparent request wraps the prompt in the model's official RGBA wording.
+- **Only a Transparent result keeps alpha.** When Transparent is off, the executor flattens transparent inputs onto white before the engine sees them, because image 1 is the canvas and its empty areas would stay see-through. Remove background always keeps alpha.
 - **Remove background uses the same image model** with the prompt "Remove the background, and output a PNG image". It needs no extra model.
 - **If the engine is offline,** jobs wait and try again every 3 seconds. After a restart of the API server, runs that were queued or running end with "Interrupted by an app restart".
 - **After 10 idle minutes** the executor asks the engine to unload its models (`POST /free`), which frees the memory they use. On an M5 Max the engine went from 38 GB to 1.3 GB. A server you run yourself reads the delay from `STUDIO_IDLE_MINUTES`, where `0` turns it off. Docker Compose doesn't pass that variable, so the app in Docker always uses 10 minutes.

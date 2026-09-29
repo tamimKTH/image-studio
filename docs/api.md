@@ -55,7 +55,7 @@ curl -s "http://127.0.0.1:4747/api/runs/$run" \
 | `size` | `1k`, `2k` | `1k` | About 1 megapixel, or 2048 × 2048 at 1:1 |
 | `quality` | `fast`, `standard`, `best` | `standard` | 16, 28 or 40 sampling steps |
 | `count` | 1 to 4 | `1` | Number of variations |
-| `transparent` | boolean | `false` | Ask for a PNG with a transparent background |
+| `transparent` | boolean | `false` | Ask for a PNG with a transparent background. When `false`, transparent input images are flattened onto white and the result is opaque. |
 | `folder` | path or `null` | `null` | Where to save. `null` uses the default folder. |
 | `advanced.seed` | integer or `null` | `null` | `null` picks a random seed |
 | `advanced.negative` | string | `""` | What to avoid |
