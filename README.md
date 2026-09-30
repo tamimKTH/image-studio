@@ -14,6 +14,12 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue"></a>
   <img alt="Platform: macOS on Apple silicon" src="https://img.shields.io/badge/platform-macOS%20·%20Apple%20silicon-black">
   <img alt="Model: Qwen-Image 2.1" src="https://img.shields.io/badge/model-Qwen--Image%202.1-7c5cff">
+  <a href="https://github.com/tamimKTH/image-studio/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/tamimKTH/image-studio"></a>
+</p>
+
+<p align="center">
+  Needs an Apple silicon Mac with <b>64 GB of memory</b> and about 95 GB of free disk. A 1K image took 85 to 100 seconds on an M5 Max.<br>
+  <a href="#install-with-an-ai-coding-agent"><b>Install with one prompt</b></a> in Claude Code, Codex, Gemini CLI or Cursor, or <a href="#install-by-hand">install by hand</a>.
 </p>
 
 <picture>
@@ -120,6 +126,7 @@ Docker on a Mac can't reach the GPU, so the image engine runs natively as a logi
 
 ## Good to know
 
+- **Built on ComfyUI.** ComfyUI runs the model. Image Studio replaces its graph of low-level nodes with a prompt box and a canvas of four node types, and adds the queue, the folders and the Library.
 - **Mac only.** The engine needs the Apple GPU (MPS). It has been built and tested on macOS with an M5 Max.
 - **One person, one Mac.** There is no login. The app accepts connections from this Mac only.
 - **Model license.** The model weights are not part of this repository. They are under the Qwen Research License, which allows non-commercial research use only.
