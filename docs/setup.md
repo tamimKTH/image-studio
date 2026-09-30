@@ -2,6 +2,8 @@
 
 This guide installs Image Studio on a Mac, from a fresh clone to the first image. It also covers updating, uninstalling and fixing common problems.
 
+An AI coding agent can do these steps for you. The [README](../README.md#install-with-an-ai-coding-agent) has the prompt to give it.
+
 ## What you need
 
 | | Requirement |
